@@ -42,6 +42,15 @@ Model chỉ sửa **bản nháp**. Lịch thật chỉ đổi khi người dùng
 5. Không vượt số phút liền tối đa.
 6. Tham số tool sai khuôn (JSON hỏng, thiếu trường) thì trả lỗi rõ ràng, không sập.
 
+### Luật bổ sung (chốt tối 27/10, lấy từ cách Trí tự lên lịch ôn thi)
+
+7. Mỗi khối linh hoạt có hạng: **chính** (Block 1, 2, 3 theo thứ tự) hoặc **phụ**.
+8. Khi thiếu giờ, thứ tự cắt bắt buộc: bỏ khối phụ trước, rồi rút Block 3. Agent đề xuất cắt theo đúng thứ tự này, người dùng duyệt.
+9. Giờ ngủ là khối cố định. Không bao giờ lùi giờ ngủ để nhét việc.
+10. Chỉ lấp tối đa một tỉ lệ giờ rảnh (mặc định 60%). Phần còn lại để dành cho ăn, chuyển việc, phát sinh.
+
+Mọi con số (tỉ lệ lấp, độ dài block, đệm sau block, giờ ngủ) có giá trị mặc định theo quy tắc của Trí và người dùng tự chỉnh trong cài đặt.
+
 Lệnh vi phạm bị từ chối kèm lý do cụ thể, ví dụ: `move_block rejected: overlaps fixed block "Class" 09:00-11:00`.
 
 ## Ranh giới với dự án cũ
