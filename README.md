@@ -4,7 +4,19 @@
 
 Built for the [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/meta-ai-developer-hackathon) (Indie track, theme: Build for Your World), October 27 to November 4, 2026.
 
-> Status: day 1 of 9. This README grows with the project.
+> Status: day 2 of 9. This README grows with the project.
+
+## Stress test
+
+The planner's promises (never plan into sleep, never move a class or exam, never cut work without asking, never drop below a life floor silently, never lose a task) are checked by `src/invariants.js` after every re-plan in a simulator of randomly broken days:
+
+```
+npm run simulate
+Simulated 100,000 broken days, 995,856 re-plans in 17062 ms (seed 20261027).
+Broken promises: 0
+```
+
+The checker itself was verified by planting bugs on purpose (sleep overrun, silent cut, ignored fill ratio); each was caught within the first 1,000 days.
 
 ## The problem
 
