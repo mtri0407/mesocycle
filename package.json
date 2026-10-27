@@ -1,0 +1,16 @@
+{
+  "name": "mesocycle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.134.0"
+  },
+  "allowScripts": {
+    "workerd@1.20261023.1": true
+  }
+}

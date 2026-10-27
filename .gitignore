@@ -1,0 +1,8 @@
+# Secrets: never commit these
+.dev.vars
+.env
+.env.*
+!.dev.vars.example
+
+node_modules/
+.wrangler/

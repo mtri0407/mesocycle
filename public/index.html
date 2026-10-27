@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mesocycle</title>
+  <style>
+    :root { --bg: #f6f7f9; --fg: #14171c; --muted: #5b6472; --card: #fff; --accent: #2457d6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --accent: #6f95ff; }
+    }
+    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+    main { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+    h1 { margin: 0 0 4px; }
+    p { color: var(--muted); margin: 0 0 24px; }
+    .card { background: var(--card); border-radius: 12px; padding: 16px; }
+    button { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+    pre { white-space: pre-wrap; margin: 12px 0 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Mesocycle</h1>
+    <p>An agent that re-plans your study, work and personal time when the plan breaks.</p>
+    <div class="card">
+      <button id="check">Check model connection</button>
+      <pre id="out"></pre>
+    </div>
+  </main>
+  <script>
+    document.getElementById('check').onclick = async () => {
+      const out = document.getElementById('out');
+      out.textContent = 'Calling the model...';
+      const res = await fetch('/api/model-check');
+      out.textContent = JSON.stringify(await res.json(), null, 2);
+    };
+  </script>
+</body>
+</html>
