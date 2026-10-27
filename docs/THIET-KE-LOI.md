@@ -1,63 +1,78 @@
-# Thiết kế lõi Mesocycle (đã chốt 27/10)
+# Thiết kế lõi Mesocycle (chốt 27/10, bản 2)
 
 Trí và Claude bàn và chốt ngày 27/10. Muốn đổi điểm nào thì bàn lại trước khi sửa code.
+
+## Nguyên tắc sản phẩm
+
+**Bên ngoài cực đơn giản, bên trong gánh hết độ phức tạp.**
+
+Mọi lệch kế hoạch ngoài đời quy về 6 sự kiện: bắt đầu muộn, làm lâu hơn dự kiến, xong sớm, việc chen vào, bỏ qua, thời gian rảnh co lại. Cả 6 dẫn về một bài toán duy nhất, giải lại từ thời điểm hiện tại mỗi khi có thay đổi:
+
+> Từ bây giờ tới hạn chót, việc còn lại có vừa thời gian còn lại không? Không vừa thì bỏ gì, theo thứ tự nào?
+
+Những lỗi của lịch kín kiểu cũ mà Mesocycle phải tránh:
+- Gắn giờ cho mọi việc nên trễ một việc là trễ dây chuyền (domino).
+- Ước lượng luôn hụt (planning fallacy).
+- Lỡ một việc là bỏ cả ngày (hiệu ứng "kệ luôn"), càng nặng khi lịch đánh dấu đỏ "thất bại".
+- Bắt người dùng tự sửa lịch đúng lúc họ đang mệt và trễ.
+
+Mesocycle dựa trên tâm lý **lập kế hoạch**, không tư vấn tâm lý hay sức khoẻ, không chấm tâm trạng.
 
 ## Các quyết định
 
 | Câu hỏi | Chốt |
 |---|---|
 | Ai xếp lịch | **Lai**: model quyết định qua tool, code kiểm tra từng lệnh và trả lỗi để model tự sửa |
-| Dữ liệu | **Vai trò có ngân sách giờ mỗi tuần** + việc + khối giờ cố định/linh hoạt + nhật ký thay đổi |
-| Phạm vi xếp | **Cả tuần** |
-| Dữ liệu demo | **Tuần thật của Trí** (HUST, Greysteel, thi giữa kỳ 08/11), ẩn thông tin nhạy cảm |
-| Tuần quá tải | Agent nói rõ thiếu bao nhiêu giờ, đưa 2 cách cắt, **người dùng chọn** |
-| Duyệt | Danh sách từng thay đổi, mỗi dòng bỏ được, có nút duyệt tất cả và hoàn tác |
-| Giới hạn cá nhân | **Người dùng tự khai** (giờ thức, số giờ liền tối đa). App không khuyên về sức khoẻ |
+| Việc linh hoạt | **Hàng đợi có thứ tự trong ngày**, giờ chỉ là ước tính và tự trượt. Chỉ lớp, thi, ngủ, lịch hẹn có giờ cứng |
+| Dữ liệu | Vai trò có ngân sách giờ/tuần + việc + khối cố định + hàng đợi linh hoạt + nhật ký thay đổi |
+| Phạm vi | **Cả tuần**, canh hạn chót chứ không canh giờ |
+| Khi nào hỏi người dùng | **Chỉ khi phải cắt việc, dời sang ngày khác, hoặc hạn chót bị đe doạ.** Lệch nhỏ tự trượt. Mọi thay đổi hoàn tác được |
+| Tuần quá tải | Agent nói thiếu bao nhiêu giờ, đề xuất cắt theo thứ tự luật 8, người dùng chọn |
+| Ước lượng | **Tự học tốc độ thật** (giờ thật so với dự kiến theo từng vai trò/loại việc), cộng thêm và **hiện rõ lý do**. Tắt được |
+| Màn chính | **Thẻ "Bây giờ"**: một việc nên làm ngay + 2 việc tiếp theo + nút nói/"Lệch kế hoạch". Lịch tuần là màn phụ |
+| Thao tác hằng ngày | Xong / Cần thêm thời gian (+15, +30) / Không làm được, hoặc nói một câu ("tôi trễ 40 phút") |
+| Giọng điệu | Không chữ đỏ, không "thất bại", không chuỗi phạt. Trễ thì kế hoạch co lại, không trách |
+| Dữ liệu demo | Tuần thật của Trí (HUST, thi giữa kỳ 08/11), ẩn thông tin nhạy cảm |
+| Giới hạn cá nhân | Mặc định theo quy tắc của Trí, người dùng tự chỉnh |
 
 ## Dữ liệu
 
 - `roles`: id, tên, số giờ mục tiêu mỗi tuần.
-- `tasks`: id, tên, vai trò, thời lượng ước tính (phút), hạn chót, ưu tiên (cao/vừa/thấp), trạng thái.
-- `blocks`: id, tên, bắt đầu, kết thúc, vai trò, task (nếu có), `fixed` (cố định) hoặc `flexible` (linh hoạt).
-- `settings`: giờ thức (vd 06:30 đến 23:30), số phút liền tối đa cho một khối.
-- `changes`: id, thời điểm, loại thao tác, trạng thái trước, trạng thái sau, đã duyệt/đã hoàn tác.
-
-## Tool cho model
-
-| Tool | Việc |
-|---|---|
-| `get_week` | Xem tuần: khối giờ, việc, giờ đã dùng theo vai trò |
-| `find_free_slots` | Tìm giờ trống theo thời lượng và khoảng ngày |
-| `add_block`, `move_block`, `remove_block` | Sửa lịch nháp |
-| `propose_plan` | Nộp các thay đổi để người dùng duyệt |
-
-Model chỉ sửa **bản nháp**. Lịch thật chỉ đổi khi người dùng duyệt.
+- `tasks`: id, tên, vai trò, thời lượng ước tính, hạn chót, trạng thái.
+- `fixed`: khối giờ cứng (lớp, thi, ngủ, hẹn): bắt đầu, kết thúc.
+- `queue`: hàng đợi theo ngày: thứ tự, task, thời lượng, hạng (chính 1, 2, 3 hoặc phụ).
+- `actuals`: giờ bắt đầu/kết thúc thật, để học tốc độ.
+- `settings`: giờ ngủ, tỉ lệ lấp, độ dài block, đệm sau block.
+- `changes`: nhật ký thay đổi, trạng thái trước/sau, để hoàn tác.
 
 ## Luật code kiểm tra
 
-1. Không trùng giờ với khối khác.
-2. Không sửa hoặc dời khối cố định.
-3. Không đặt khối của một việc sau hạn chót việc đó.
-4. Không ra ngoài giờ thức người dùng khai.
+1. Không trùng giờ cứng.
+2. Không sửa khối cố định.
+3. Không đặt việc sau hạn chót của nó.
+4. Không ra ngoài giờ thức.
 5. Không vượt số phút liền tối đa.
-6. Tham số tool sai khuôn (JSON hỏng, thiếu trường) thì trả lỗi rõ ràng, không sập.
+6. Tham số tool sai khuôn thì trả lỗi rõ ràng, không sập.
+7. Mỗi việc trong hàng đợi có hạng: chính (Block 1, 2, 3) hoặc phụ.
+8. Thiếu giờ thì cắt theo thứ tự: phụ trước, rồi Block 3. Không tự cắt, phải đề xuất.
+9. Không bao giờ lùi giờ ngủ.
+10. Chỉ lấp tối đa một tỉ lệ giờ rảnh (mặc định 60%).
 
-### Luật bổ sung (chốt tối 27/10, lấy từ cách Trí tự lên lịch ôn thi)
+Lệnh vi phạm bị từ chối kèm lý do, ví dụ: `move rejected: overlaps fixed "Class" 09:00-11:00`.
 
-7. Mỗi khối linh hoạt có hạng: **chính** (Block 1, 2, 3 theo thứ tự) hoặc **phụ**.
-8. Khi thiếu giờ, thứ tự cắt bắt buộc: bỏ khối phụ trước, rồi rút Block 3. Agent đề xuất cắt theo đúng thứ tự này, người dùng duyệt.
-9. Giờ ngủ là khối cố định. Không bao giờ lùi giờ ngủ để nhét việc.
-10. Chỉ lấp tối đa một tỉ lệ giờ rảnh (mặc định 60%). Phần còn lại để dành cho ăn, chuyển việc, phát sinh.
+## Tool cho model
 
-Mọi con số (tỉ lệ lấp, độ dài block, đệm sau block, giờ ngủ) có giá trị mặc định theo quy tắc của Trí và người dùng tự chỉnh trong cài đặt.
+`get_state` (hôm nay, tuần, hạn chót, tốc độ thật), `find_capacity` (giờ rảnh còn lại tới một mốc), `reorder_queue`, `move_to_day`, `add_item`, `cut_item`, `propose` (gửi đề xuất cần người dùng chọn).
 
-Lệnh vi phạm bị từ chối kèm lý do cụ thể, ví dụ: `move_block rejected: overlaps fixed block "Class" 09:00-11:00`.
+## Kiểm chứng: bộ mô phỏng
+
+Sinh ngẫu nhiên khoảng 100.000 ngày bị vỡ (trễ, quá giờ, chen việc, bỏ việc trộn lẫn), chạy bộ xếp lịch và kiểm tra luật không bao giờ bị phạm: giờ ngủ nguyên vẹn, khối cố định nguyên vẹn, hạn chót được giữ hoặc được báo trước. Kết quả đưa vào README và video demo.
 
 ## Ranh giới với dự án cũ
 
-Greysteel Tasks ("Lịch thông minh") là app khác, làm trước hackathon. Mesocycle viết mới hoàn toàn, không chép code cũ.
+Greysteel Tasks là app khác, làm trước hackathon. Mesocycle viết mới hoàn toàn, không chép code cũ. Bài học rút ra từ nó (quá phức tạp, lịch kín gây domino) là lý do Mesocycle được thiết kế như trên.
 
 ## Kế hoạch code
 
-- **Ngày 2 (28/10):** dữ liệu + bộ kiểm tra luật + `find_free_slots`, test kỹ. Chưa cần model.
-- **Ngày 3 (29/10):** vòng lặp agent gọi tool, màn duyệt và hoàn tác. Bàn system prompt với Trí trước khi viết.
+- **Ngày 2 (28/10):** dữ liệu, bộ kiểm tra luật, hàng đợi tự trượt, tính giờ rảnh còn lại, bộ mô phỏng. Chưa cần model.
+- **Ngày 3 (29/10):** vòng lặp agent gọi tool, thẻ "Bây giờ", đề xuất cắt và hoàn tác. Bàn system prompt với Trí trước khi viết.
