@@ -18,6 +18,18 @@ Những lỗi của lịch kín kiểu cũ mà Mesocycle phải tránh:
 
 Mesocycle dựa trên tâm lý **lập kế hoạch**, không tư vấn tâm lý hay sức khoẻ, không chấm tâm trạng.
 
+## Bước đột phá (chốt bản 3, tối 27/10)
+
+Bài học từ Greysteel Tasks: Trí bỏ engine xếp bù và quay sang chat với Claude, vì (1) engine bắt cài đặt trước, (2) xếp bù là đoán tương lai nên phát sinh tới lại vỡ, (3) engine coi thời gian như tiền lẻ, không hiểu nội dung việc nào quan trọng hơn, (4) chat có bối cảnh và chỉ cần nói. Mesocycle = trải nghiệm chat đó, cộng trí nhớ có cấu trúc, cộng luật bảo đảm, không cần cài đặt.
+
+1. **Lập kế hoạch muộn và sổ nợ.** Chỉ hôm nay có hàng đợi cụ thể. Các ngày sau chỉ giữ ngân sách giờ theo vai trò và hạn chót. Việc làm thiếu thành **nợ** của mục tiêu đó, không bị nhét trước vào giờ nào. Agent trả nợ lúc check-in sáng hoặc khi có giờ trống, theo tình hình thật lúc đó.
+2. **Mức sàn bảo vệ cuộc sống (luật cứng).** Mỗi vai trò có mục tiêu và mức sàn. Agent không bao giờ đề xuất cắt dưới sàn. Muốn phá sàn người dùng phải tự xác nhận. Pitch: *"Mesocycle không để bạn đổi cả cuộc sống lấy năng suất."* Đây là ngân sách thời gian, không phải lời khuyên sức khoẻ.
+3. **Không cần cài đặt.** Không khai năng lượng hay khối đệm. App tự học từ hành vi thật (quá giờ bao nhiêu, làm gì hiệu quả lúc nào) và nói rõ điều đã học để người dùng sửa.
+
+Vai trò của Trí theo thứ tự ưu tiên: GPA → Greysteel Education → Sức khoẻ và ngoại hình (gym, powerlifting) → Project → Hoạt động ngoại khoá (CLB, BCS). Thêm vai trò Gia đình và bạn bè với mức sàn. Trong hackathon, Greysteel là một vai trò có ngân sách giờ và việc kèm hạn chót, chưa chia theo mảng.
+
+**Demo chính:** một ngày vỡ thật ("chiều nay bỏ 2 block Giải tích, tối có họp"). Agent tính nợ, báo rủi ro cho kỳ thi 08/11, đề xuất cắt đúng thứ tự, giữ nguyên mức sàn gia đình và gym. Kết bằng con số mô phỏng 100.000 ngày.
+
 ## Các quyết định
 
 | Câu hỏi | Chốt |
