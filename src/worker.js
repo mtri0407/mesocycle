@@ -23,7 +23,7 @@ export default {
       try {
         const out = await chat(env, {
           messages: [{ role: 'user', content: 'Reply with exactly: Mesocycle is alive.' }],
-          maxTokens: 30,
+          maxTokens: 400, // reasoning models think first; 30 tokens ran out before any answer
         }, url.searchParams.get('provider'));
         return json({ ok: true, provider: out.provider, ms: out.ms, text: out.text });
       } catch (err) {
