@@ -5,35 +5,203 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesocycle</title>
   <style>
-    :root { --bg: #f6f7f9; --fg: #14171c; --muted: #5b6472; --card: #fff; --accent: #2457d6; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --accent: #6f95ff; }
+    :root {
+      --bg: #f5f6f8; --fg: #15181d; --muted: #5d6573; --card: #fff; --line: #e3e6eb;
+      --accent: #2457d6; --accent-fg: #fff; --ok: #1a7f4b; --warn: #a15c00; --bad: #b42318; --chip: #eef1f6;
     }
-    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
-    main { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
-    h1 { margin: 0 0 4px; }
-    p { color: var(--muted); margin: 0 0 24px; }
-    .card { background: var(--card); border-radius: 12px; padding: 16px; }
-    button { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
-    pre { white-space: pre-wrap; margin: 12px 0 0; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --line: #2a2f38;
+        --accent: #6f95ff; --accent-fg: #0f1115; --ok: #4cc38a; --warn: #e3a24a; --bad: #f97066; --chip: #232832;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
+    main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    h1 { margin: 0; font-size: 22px; }
+    h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .muted { color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .now-title { font-size: 22px; font-weight: 650; margin: 2px 0 4px; }
+    .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button { font: inherit; font-size: 15px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    button:disabled { opacity: .5; cursor: default; }
+    .next { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .next:first-of-type { border-top: 0; }
+    textarea { width: 100%; font: inherit; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; min-height: 64px; }
+    .reply { white-space: pre-wrap; margin: 12px 0 0; }
+    .option { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
+    .option ul { margin: 6px 0 8px; padding-left: 18px; }
+    .steps { font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 6px 0 0; padding-left: 18px; }
+    .ok { color: var(--ok); } .no { color: var(--bad); }
+    .bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 3px; }
+    .bar i { display: block; height: 100%; background: var(--accent); }
+    .bar.under i { background: var(--warn); }
+    .floor { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 14px; margin-bottom: 8px; }
+    .warn { color: var(--warn); }
+    details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+    input[type=time], select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
   </style>
 </head>
 <body>
   <main>
-    <h1>Mesocycle</h1>
-    <p>An agent that re-plans your study, work and personal time when the plan breaks.</p>
-    <div class="card">
-      <button id="check">Check model connection</button>
-      <pre id="out"></pre>
-    </div>
+    <header>
+      <h1>Mesocycle</h1>
+      <span class="muted" id="date"></span>
+    </header>
+
+    <section class="card" id="now-card"></section>
+    <section class="card" id="next-card"></section>
+
+    <section class="card">
+      <h2>What changed?</h2>
+      <textarea id="say" placeholder="e.g. I slept through the afternoon, and there's a class meeting at 7pm for an hour"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="send">Re-plan</button>
+        <select id="provider" title="Model">
+          <option value="meta">Muse Spark</option>
+          <option value="open">Muse Spark Open</option>
+        </select>
+        <span class="muted" id="status"></span>
+      </div>
+      <div id="answer"></div>
+    </section>
+
+    <section class="card" id="week-card"></section>
+
+    <details class="card">
+      <summary>Demo controls</summary>
+      <div class="row" style="margin-top:10px">
+        <label>Clock <input type="time" id="clock" step="300"></label>
+        <button id="reset">Reset demo day</button>
+      </div>
+    </details>
   </main>
+
   <script>
-    document.getElementById('check').onclick = async () => {
-      const out = document.getElementById('out');
-      out.textContent = 'Calling the model...';
-      const res = await fetch('/api/model-check');
-      out.textContent = JSON.stringify(await res.json(), null, 2);
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    let state = null, view = null;
+
+    function save() { try { localStorage.setItem('meso-state', JSON.stringify(state)); } catch {} }
+    function load() { try { return JSON.parse(localStorage.getItem('meso-state')); } catch { return null; } }
+
+    async function api(path, body) {
+      const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+      const data = await res.json();
+      if (!data.ok && !data.state) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function apply(data) {
+      if (data.state) { state = data.state; save(); }
+      if (data.view) view = data.view;
+      render();
+    }
+
+    async function resetDay(time = '07:00') {
+      apply(await api(`/api/demo?now=${time}`));
+      $('answer').innerHTML = '';
+    }
+
+    async function refresh() { apply(await api('/api/tool', { state, name: 'get_state' })); }
+
+    const roleName = (id) => (view.roles.find((r) => r.id === id) || {}).name || id;
+    const span = (q) => toMin(q.end) - toMin(q.start);
+
+    function render() {
+      $('date').textContent = `Fri 30 Oct, ${view.now}`;
+      $('clock').value = view.now;
+      const [now, ...next] = view.queue;
+
+      $('now-card').innerHTML = now ? `
+        <h2>Now</h2>
+        <div class="now-title">${esc(now.title)}</div>
+        <div class="row muted" style="margin-bottom:12px">
+          <span>${now.start} to ${now.end}</span><span class="chip">${esc(roleName(now.role))}</span>
+        </div>
+        <div class="row">
+          <button class="primary" data-act="done">Done</button>
+          <button data-act="more">Need 15 more min</button>
+          <button data-act="skip">Can't do it</button>
+        </div>` : `<h2>Now</h2><div class="now-title">Nothing left that fits today.</div>
+        <p class="muted" style="margin:0">Unfinished work is kept as debt and comes back when there is real free time.</p>`;
+      if (now) $('now-card').querySelectorAll('button').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
+
+      const misfit = view.doesNotFit.length ? `<p class="warn" style="margin:10px 0 0">Doesn't fit today: ${view.doesNotFit.map((x) => esc(x.title)).join(', ')}. Tell Mesocycle what changed and it will re-plan.</p>` : '';
+      $('next-card').innerHTML = `<h2>Next</h2>${next.slice(0, 3).map((n) => `
+        <div class="next"><span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || '<p class="muted" style="margin:0">Nothing else today.</p>'}
+        ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">Fixed: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
+
+      const debt = view.debtMinutes;
+      $('week-card').innerHTML = `<h2>This week</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
+        const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
+        const pct = Math.min(100, Math.round(have / r.floorMin * 100));
+        return `<div class="floor"><span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h of ${r.floorMin / 60}h floor${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h debt` : ''}</span>
+          <div class="bar ${have < r.floorMin ? 'under' : ''}" style="grid-column:1/3"><i style="width:${pct}%"></i></div></div>`;
+      }).join('') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? 'on track' : `${Math.round(d.shortMin / 60)}h short`}</p>`).join('');
+    }
+
+    async function act(kind, item) {
+      let args;
+      if (kind === 'done') {
+        args = { id: item.id, status: 'done', minutes: span(item) };
+        state.now = Math.max(state.now, toMin(item.end));
+      } else if (kind === 'more') {
+        args = { id: item.id, status: 'more_time', minutes: 15 };
+      } else {
+        args = { id: item.id, status: 'skipped' };
+      }
+      apply(await api('/api/tool', { state, name: 'update_item', args }));
+    }
+
+    $('send').onclick = async () => {
+      const text = $('say').value.trim();
+      if (!text) return;
+      $('send').disabled = true;
+      $('status').textContent = 'Thinking...';
+      $('answer').innerHTML = '';
+      try {
+        const data = await api('/api/agent', { state, text, provider: $('provider').value });
+        apply(data);
+        $('say').value = '';
+        showAnswer(data);
+        $('status').textContent = `${(data.modelMs / 1000).toFixed(1)}s`;
+      } catch (e) {
+        $('status').textContent = e.message;
+      } finally {
+        $('send').disabled = false;
+      }
     };
+
+    function showAnswer(data) {
+      const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
+      const p = data.proposal;
+      $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>` +
+        (p ? p.options.map((ids, i) => `<div class="option"><strong>${i === 0 ? 'Suggested' : 'Or'}</strong>: move to debt
+          <ul>${ids.map((id) => `<li>${esc(title(id))}</li>`).join('')}</ul>
+          <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">Approve</button></div>`).join('') : '') +
+        `<details style="margin-top:12px"><summary>Agent steps (${data.trace.length})</summary><ol class="steps">${data.trace.map((t) =>
+          `<li><span class="${t.ok ? 'ok' : 'no'}">${t.ok ? '✓' : '✗'}</span> ${esc(t.tool)}${t.error ? `: <span class="no">${esc(t.error)}</span>` : ''}</li>`).join('')}</ol></details>`;
+      if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
+        b.onclick = async () => {
+          apply(await api('/api/approve', { state, ids: p.options[Number(b.dataset.opt)] }));
+          $('answer').innerHTML = '<p class="reply muted">Done. Moved to debt; it comes back when there is real free time.</p>';
+        };
+      });
+    }
+
+    $('reset').onclick = () => resetDay($('clock').value || '07:00');
+    $('clock').onchange = async () => { state.now = toMin($('clock').value); await refresh(); };
+
+    (async () => {
+      state = load();
+      if (state) await refresh(); else await resetDay();
+    })();
   </script>
 </body>
 </html>

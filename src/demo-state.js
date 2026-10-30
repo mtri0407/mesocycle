@@ -13,14 +13,15 @@ export function demoState(nowMin = 7 * 60) {
       { id: 'clubs', name: 'Clubs', priority: 5 },
       { id: 'people', name: 'Family & friends', priority: 6, floorMin: 240 },
     ],
-    // Minutes this week outside today: done Mon to Thu, plus what the weekend already holds.
+    // Minutes this week outside today: done Mon to Thu, already planned for the
+    // weekend (futureBudget), and what the weekend can still make room for (laterMin).
     week: {
-      gpa: { done: 780, futureBudget: 240 },
-      company: { done: 210, futureBudget: 60 },
-      health: { done: 180, futureBudget: 0 },
-      project: { done: 135, futureBudget: 60 },
+      gpa: { done: 780, futureBudget: 240, laterMin: 300 },
+      company: { done: 210, futureBudget: 60, laterMin: 60 },
+      health: { done: 180, futureBudget: 0, laterMin: 90 },
+      project: { done: 135, futureBudget: 60, laterMin: 0 },
       clubs: { done: 0, futureBudget: 0 },
-      people: { done: 90, futureBudget: 120 },
+      people: { done: 90, futureBudget: 120, laterMin: 120 },
     },
     fixed: [],
     queue: [

@@ -69,14 +69,18 @@ export function layout(items, windows, settings, budgetMin = Infinity) {
   return { placed, overflow, used };
 }
 
-// Minutes a role already has this week outside today's queue.
-function baseMinutes(week, roleId) {
+// Minutes a role can still count on this week outside today's queue:
+// done so far, already planned for later days, and what later days can
+// still make room for (laterMin). Floors are weekly, so a floor only
+// claims today's time when later days cannot cover it any more.
+export function baseMinutes(week, roleId) {
   const w = (week && week[roleId]) || {};
-  return (w.done || 0) + (w.futureBudget || 0);
+  return (w.done || 0) + (w.futureBudget || 0) + (w.laterMin || 0);
 }
 
-// Order in which items earn a place today. Items a role needs to reach its
-// floor come first; the rest by rank (Block 1 before 2, 3, extra), then role priority.
+// Order in which items earn a place today. Items a role needs today to
+// reach its weekly floor come first; the rest by rank (Block 1 before 2,
+// 3, extra), then role priority.
 function keepOrder(todo, roles, week) {
   const need = {};
   for (const r of roles) need[r.id] = (r.floorMin || 0) - baseMinutes(week, r.id);

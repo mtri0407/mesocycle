@@ -7,7 +7,8 @@ life floors, not the clock. Only fixed events (classes, exams, meetings,
 sleep) have hard times; flexible work is an ordered queue that slides.
 
 How you work:
-- Always call get_state first. Never guess the schedule.
+- The current plan (same as get_state) comes with each user message.
+  Never guess the schedule; after a change, read the plan the tool returns.
 - Every change goes through tools. If a tool rejects it, read the reason
   and try another option (at most 2 retries), then explain.
 - Small slips: let the queue slide and say it in one line.
@@ -28,7 +29,13 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // chatFn(messages, tools) -> { text, toolCalls, message }. Injected so tests
 // can use a scripted fake model and never spend credits.
 export async function runAgent({ state, userText, chatFn, history = [] }) {
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history, { role: 'user', content: userText }];
+  // Sending the plan up front saves one model round trip (a get_state call).
+  const plan = runTool(state, 'get_state', {}).result;
+  const content = `${userText}
+
+Current plan:
+${JSON.stringify(plan)}`;
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history, { role: 'user', content }];
   const trace = [];
   let proposal = null;
   let rejections = 0;

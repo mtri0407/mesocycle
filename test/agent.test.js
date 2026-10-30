@@ -44,7 +44,11 @@ test('a late afternoon overflows, and propose refuses cuts that are not enough o
   assert.equal(st.needsUser, true);
   const notEnough = runTool(s, 'propose', { message: 'm', cut_ids: ['q-7'] });
   assert.match(notEnough.error, /still does not fit/);
-  const floor = runTool(s, 'propose', { message: 'm', cut_ids: st.doesNotFit.map((x) => x.id).concat('q-9') });
+  // Floors are weekly: with weekend room left, cutting the call home is fine...
+  assert.equal(runTool(s, 'propose', { message: 'm', cut_ids: st.doesNotFit.map((x) => x.id).concat('q-9') }).ok, true);
+  // ...but with no room left this week it would break the floor, so it is refused.
+  const noWeekend = { ...s, week: { ...s.week, people: { ...s.week.people, laterMin: 0 } } };
+  const floor = runTool(noWeekend, 'propose', { message: 'm', cut_ids: runTool(noWeekend, 'get_state', {}).result.doesNotFit.map((x) => x.id).concat('q-9') });
   assert.match(floor.error, /Family & friends under its weekly floor/);
   // Seen with the open model on 30/10: an alternative that keeps too much is refused too.
   const badAlt = runTool(s, 'propose', { message: 'm', cut_ids: st.doesNotFit.map((x) => x.id), alternative_cut_ids: ['q-7'] });

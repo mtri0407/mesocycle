@@ -2,7 +2,7 @@
 // changes a copy of the state through planner.js, and answers in plain JSON.
 // A rejected call returns { ok: false, error } so the model can read the
 // reason and try something else; the state is left untouched.
-import { DEFAULT_SETTINGS, replan, applyEvent, debtByRole, deadlineRisk, toMin, toHHMM } from './planner.js';
+import { DEFAULT_SETTINGS, replan, applyEvent, debtByRole, deadlineRisk, baseMinutes, toMin, toHHMM } from './planner.js';
 
 export const TOOL_DEFS = [
   {
@@ -104,7 +104,7 @@ function summary(state) {
 // Would cutting these items push a role under its floor?
 function floorBroken(state, ids) {
   const plan = replan(applyEvent(state, { type: 'cut', ids }));
-  const after = Object.fromEntries(state.roles.map((r) => [r.id, (state.week[r.id]?.done || 0) + (state.week[r.id]?.futureBudget || 0)]));
+  const after = Object.fromEntries(state.roles.map((r) => [r.id, baseMinutes(state.week, r.id)]));
   for (const p of plan.placed) after[p.roleId] += p.end - p.start;
   return state.roles.filter((r) => r.floorMin && after[r.id] < r.floorMin && ids.some((id) => state.queue.find((i) => i.id === id)?.roleId === r.id));
 }
@@ -175,6 +175,7 @@ export function runTool(state, name, args) {
         if (!Array.isArray(ids) || !ids.every((id) => todoIds.has(id))) return { ...reject('cut ids must be open item ids from get_state.'), state };
       }
       if (!cut.length) return { ...reject('cut_ids is empty.'), state };
+      if (alt.length && [...cut].sort().join() === [...alt].sort().join()) return { ...reject('alternative_cut_ids is the same as cut_ids. Offer a different option or leave it out.'), state };
       // Every option must make the day fit. Checked here, not trusted from the model.
       for (const [label, ids] of [['cut_ids', cut], ['alternative_cut_ids', alt]]) {
         if (ids.length && replan(applyEvent(state, { type: 'cut', ids })).needsUser) {

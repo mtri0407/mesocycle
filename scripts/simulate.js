@@ -43,7 +43,7 @@ function makeDay(r) {
     queue.push({ id: `q-${i}`, roleId: pick(ROLES).id, minutes: pick([20, 30, 45, 60, 90, 120]), rank: pick([1, 2, 3, 'extra']), status: 'todo' });
   }
   const week = {};
-  for (const role of ROLES) week[role.id] = { done: int(0, 400), futureBudget: int(0, 300) };
+  for (const role of ROLES) week[role.id] = { done: int(0, 400), futureBudget: int(0, 300), laterMin: int(0, 1) * int(0, 300) };
   return {
     now: wake + int(0, 180),
     settings: { wake, sleep, fillRatio: pick([0.5, 0.6, 0.7, 1]), bufferMin: pick([0, 10, 15, 20]) },

@@ -1,6 +1,6 @@
 // The promises Mesocycle makes, written as checks. The simulator runs them
 // after every re-plan; any broken promise is a bug in the planner.
-import { DEFAULT_SETTINGS, freeWindows, layout } from './planner.js';
+import { DEFAULT_SETTINGS, freeWindows, layout, baseMinutes } from './planner.js';
 
 export function checkPlan(state, result, originalFixed = state.fixed) {
   const errors = [];
@@ -59,9 +59,9 @@ export function checkPlan(state, result, originalFixed = state.fixed) {
   // 8. Going below a floor is never silent.
   for (const r of state.roles || []) {
     if (!r.floorMin || !result.cuts.some((id) => todo.find((t) => t.id === id)?.roleId === r.id)) continue;
-    const w = (state.week && state.week[r.id]) || {};
+
     const today = placed.filter((p) => p.roleId === r.id).reduce((s, p) => s + p.end - p.start, 0);
-    if ((w.done || 0) + (w.futureBudget || 0) + today < r.floorMin && !result.floorBreaches.includes(r.id)) {
+    if (baseMinutes(state.week, r.id) + today < r.floorMin && !result.floorBreaches.includes(r.id)) {
       errors.push(`silent floor breach: ${r.id}`);
     }
   }
