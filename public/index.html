@@ -166,6 +166,9 @@
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
         date: 'Fri 30 Oct',
+        late: (m) => `You're about ${m} min behind on this. Want me to re-plan the rest of the day?`,
+        lateReplan: 'Re-plan', lateStill: 'Still on it (+15 min)',
+        lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
       },
       vi: {
         intro: `<h2>Đây là gì?</h2>
@@ -207,6 +210,9 @@
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
         date: 'Thứ Sáu 30/10',
+        late: (m) => `Bạn đang trễ khoảng ${m} phút ở việc này. Mình xếp lại phần còn lại của ngày nhé?`,
+        lateReplan: 'Xếp lại', lateStill: 'Vẫn đang làm (+15 phút)',
+        lateText: (m, title) => `Tôi đang trễ ${m} phút: "${title}" vẫn chưa xong. Xếp lại phần còn lại của hôm nay giúp tôi.`,
       },
     };
 
@@ -282,13 +288,24 @@
       return p >= 10 ? `<p class="hint">⏱ ${esc(t('pace')(p, roleName(roleId)))}</p>` : '';
     }
 
+    let focus = null; // { id, end } of the item when it first became Now
+    function lateBanner(now) {
+      if (!now) { focus = null; return ''; }
+      if (!focus || focus.id !== now.id) focus = { id: now.id, end: toMin(now.end) };
+      const late = state.now - focus.end;
+      if (late < 10) return '';
+      return `<div class="caption" style="margin:0 0 12px">⏰ ${esc(t('late')(late))}
+        <div class="row" style="margin-top:8px"><button class="primary small" id="late-go">${t('lateReplan')}</button><button class="small" id="late-more">${t('lateStill')}</button></div></div>`;
+    }
+
     function render() {
       $('date').textContent = `${mode === 'real' ? t('today') : t('date')}, ${view.now}`;
       $('clock').value = view.now;
       const [now, ...next] = view.queue;
 
+      const banner = lateBanner(now);
       $('now-card').innerHTML = now ? `
-        <h2>${t('now')}</h2>
+        <h2>${t('now')}</h2>${banner}
         <div class="now-title">${esc(now.title)}</div>
         <div class="row muted" style="margin-bottom:12px">
           <span>${now.start} - ${now.end}</span><span class="chip">${esc(roleName(now.role))}</span>
@@ -300,7 +317,12 @@
         </div>
         <p class="hint">${t('nowHint')}</p>${paceLine(now.role)}` : `<h2>${t('now')}</h2><div class="now-title">${t('nothingLeft')}</div>
         <p class="hint">${t('debtNote')}</p>`;
-      if (now) $('now-card').querySelectorAll('button').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
+      if (now) $('now-card').querySelectorAll('button[data-act]').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
+      if (banner) {
+        const late = state.now - focus.end;
+        $('late-go').onclick = () => { focus = { id: now.id, end: state.now }; $('say').value = t('lateText')(late, now.title); send(); };
+        $('late-more').onclick = () => { focus = { id: now.id, end: state.now + 15 }; act('more', now); };
+      }
 
       const misfit = view.doesNotFit.length ? `<p class="warn" style="margin:10px 0 0">${t('doesNotFit')}: ${view.doesNotFit.map((x) => esc(x.title)).join(', ')}. ${t('doesNotFitTail')}</p>` : '';
       $('next-card').innerHTML = `<h2>${t('next')}</h2>${next.slice(0, 3).map((n) => `
