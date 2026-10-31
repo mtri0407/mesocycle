@@ -76,6 +76,7 @@
       <h1>Mesocycle</h1>
       <div class="row">
         <span class="muted" id="date"></span>
+        <a class="small" id="guide" href="/huong-dan.html" style="font-size:13px;color:var(--accent)">?</a>
         <button class="small" id="lang" title="Tiếng Việt / English"></button>
       </div>
     </header>
@@ -261,6 +262,7 @@
     function applyLang() {
       document.documentElement.lang = lang;
       $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
+      $('guide').textContent = lang === 'vi' ? 'Hướng dẫn' : 'Guide';
       document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
       $('say').placeholder = t('placeholder');
       $('setup-text').placeholder = t('setupPlaceholder');
