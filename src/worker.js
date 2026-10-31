@@ -19,10 +19,34 @@ function json(data, status = 200) {
 
 const view = (state) => runTool(state, 'get_state', {}).result;
 
+// Guard for routes that call a model: at most 12 a minute per visitor
+// (Cloudflare rate limit binding) and a daily ceiling for the whole app (KV).
+const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe'];
+const DAILY_CAP = 3000;
+async function aiGuard(request, env) {
+  const ip = request.headers.get('cf-connecting-ip') || 'local';
+  if (env.AI_LIMIT) {
+    const { success } = await env.AI_LIMIT.limit({ key: ip });
+    if (!success) return json({ ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' }, 429);
+  }
+  if (env.FEEDBACK) {
+    const key = `calls:${new Date().toISOString().slice(0, 10)}`;
+    const n = Number(await env.FEEDBACK.get(key)) || 0;
+    if (n >= DAILY_CAP) return json({ ok: false, code: 'cap', error: 'The demo hit its daily AI limit. Try again tomorrow, or watch the video.' }, 429);
+    await env.FEEDBACK.put(key, String(n + 1), { expirationTtl: 3 * 86400 });
+  }
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
+      if (request.method === 'POST' && AI_ROUTES.includes(url.pathname)) {
+        const blocked = await aiGuard(request, env);
+        if (blocked) return blocked;
+      }
+
       // Voice check-in: the browser sends a WAV clip, we return the text.
       if (url.pathname === '/api/transcribe' && request.method === 'POST') {
         const wav = await request.arrayBuffer();
@@ -75,7 +99,7 @@ export default {
           modelMs += out.ms;
           return out;
         };
-        const args = { state: body.state, userText: String(body.text || ''), chatFn, image: body.image || null };
+        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null };
         if (!body.stream) {
           const out = await runAgent(args);
           return json({ ok: true, ...out, modelMs, view: view(out.state) });

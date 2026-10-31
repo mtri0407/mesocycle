@@ -1,0 +1,17 @@
+{
+  "name": "Mesocycle",
+  "short_name": "Mesocycle",
+  "description": "A planning agent that re-plans your day when life breaks the plan.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2457d6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

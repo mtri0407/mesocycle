@@ -12,3 +12,11 @@ run_worker_first = ["/api/*"]
 [[kv_namespaces]]
 binding = "FEEDBACK"
 id = "314d552393544b1faffe8fd90abedaa4"
+
+# Per-visitor limit on AI calls (agent, setup, voice), so one visitor cannot drain the credits.
+[[ratelimits]]
+name = "AI_LIMIT"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 12
+  period = 60

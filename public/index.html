@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesocycle</title>
+  <meta name="description" content="A planning agent that re-plans your day when life breaks the plan.">
+  <meta name="theme-color" content="#2457d6">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
   <style>
     :root {
       --bg: #f5f6f8; --fg: #15181d; --muted: #5d6573; --card: #fff; --line: #e3e6eb;
@@ -183,7 +188,7 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
+        date: 'Fri 30 Oct', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
         late: (m) => `You're about ${m} min behind on this. Want me to re-plan the rest of the day?`,
         lateReplan: 'Re-plan', lateStill: 'Still on it (+15 min)',
         lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
@@ -227,7 +232,7 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
+        date: 'Thứ Sáu 30/10', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
         late: (m) => `Bạn đang trễ khoảng ${m} phút ở việc này. Mình xếp lại phần còn lại của ngày nhé?`,
         lateReplan: 'Xếp lại', lateStill: 'Vẫn đang làm (+15 phút)',
         lateText: (m, title) => `Tôi đang trễ ${m} phút: "${title}" vẫn chưa xong. Xếp lại phần còn lại của hôm nay giúp tôi.`,
@@ -274,10 +279,13 @@
       $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
     }
 
+    const errMsg = (d) => (d && d.code === 'rate' ? t('errRate') : d && d.code === 'cap' ? t('errCap') : (d && d.error) || t('errNet'));
     async function api(path, body) {
-      const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
-      const data = await res.json();
-      if (!data.ok && !data.state) throw new Error(data.error || 'Request failed');
+      let res;
+      try { res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}); }
+      catch { throw new Error(t('errNet')); }
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok && !data.state) throw new Error(errMsg(data));
       return data;
     }
 
@@ -456,8 +464,8 @@
         try {
           const wav = await toWav(new Blob(chunks));
           const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error);
+          const data = await res.json().catch(() => ({}));
+          if (!data.ok) throw new Error(errMsg(data));
           if (!data.text) { status.textContent = t('notCaught'); return; }
           if (target === 'setup') { $('setup-text').value = ($('setup-text').value + ' ' + data.text).trim(); status.textContent = ''; }
           else { $('say').value = data.text; send(); }
@@ -516,7 +524,7 @@
       const started = Date.now();
       try {
         const res = await fetch('/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true }) });
-        if (!res.body) throw new Error('No response');
+        if (!res.ok || !res.body) throw new Error(errMsg(await res.json().catch(() => ({}))));
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = '', done = null;
@@ -629,6 +637,8 @@
       try { await api('/api/feedback', { text, lang }); $('fb-text').value = ''; $('fb-status').textContent = t('thanks'); }
       catch (e) { $('fb-status').textContent = e.message; }
     };
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
     (async () => {
       applyLang();
