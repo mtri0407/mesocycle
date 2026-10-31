@@ -6,7 +6,7 @@ import { checkPlan } from '../src/invariants.js';
 
 const week = (over = {}) => ({
   roles: [{ name: 'Study', priority: 1, weeklyHours: 20, floorHours: 12 }, { name: 'Family', priority: 2, weeklyHours: 2, floorHours: 2 }],
-  fixed: [{ title: 'Calculus', days: [2], start: '06:45', end: '10:10' }],
+  fixed: [{ title: 'Calculus', days: [2], start: '08:00', end: '10:00' }],
   tasks: [
     ...Array.from({ length: 10 }, (_, i) => ({ title: `Study ${i + 1}`, role: 'Study', minutes: 120, rank: '1' })),
     { title: 'Call home', role: 'family', minutes: 30, rank: 'extra' },

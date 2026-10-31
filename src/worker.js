@@ -1,7 +1,7 @@
 // Cloudflare Worker: serves the API. The web app itself comes from public/.
 // API keys live only here (env), never in the browser.
-// For now the browser keeps the plan state and sends it with each request;
-// it moves to D1 storage before the live deploy.
+// The browser keeps the plan and sends it with each request. Signed-in users
+// also get a saved copy in KV (see auth.js).
 import { chat, transcribe } from './models.js';
 import { runAgent } from './agent.js';
 import { runTool } from './tools.js';
@@ -9,7 +9,7 @@ import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
 import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, rollover, rebaseDay, adoptNext, mondayOf, goalPace, weekReview, checkTemplate, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from './setup.js';
 import { replan, toHHMM } from './planner.js';
-import { verifyGoogleToken, createSession, sessionUser, loadData, saveData } from './auth.js';
+import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData } from './auth.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -229,6 +229,7 @@ export default {
         const user = await sessionUser(request, env);
         if (!user) return json({ ok: false, code: 'auth', error: 'Please sign in again' }, 401);
         if (request.method === 'GET') return json({ ok: true, user: { name: user.name, email: user.email }, data: await loadData(env, user) });
+        if (request.method === 'DELETE') { await deleteData(env, user); return json({ ok: true }); }
         if (request.method === 'POST' && body) {
           await saveData(env, user, { mode: body.mode, template: body.template, state: body.state, stats: body.stats });
           return json({ ok: true });

@@ -58,6 +58,13 @@ export async function loadData(env, user) {
   return raw ? JSON.parse(raw) : null;
 }
 
+// Removes the saved plan and this session. Sessions on other devices run out
+// on their own within 30 days; KV cannot look them up by person.
+export async function deleteData(env, user) {
+  await env.FEEDBACK.delete(`user:${user.sub}`);
+  await env.FEEDBACK.delete(`sess:${user.sid}`);
+}
+
 export async function saveData(env, user, data) {
   const text = JSON.stringify({ ...data, savedAt: new Date().toISOString() });
   if (text.length > MAX_DATA) throw new Error('Plan too large to save');

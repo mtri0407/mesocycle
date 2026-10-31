@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mesocycle Privacy</title>
+  <meta name="description" content="How Mesocycle handles your data.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <style>
+    :root { --bg: #f5f6f8; --fg: #15181d; --muted: #5d6573; --line: #e3e6eb; --accent: #2457d6; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --line: #2a2f38; --accent: #7ea3ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); }
+    main { max-width: 680px; margin: 0 auto; padding: 24px 16px 56px; }
+    h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; }
+    h2 { font-size: 18px; margin: 28px 0 6px; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0 24px; }
+    ul { padding-left: 20px; margin: 6px 0; }
+    li { margin: 4px 0; }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); font-size: 14px; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-top: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="muted"><a href="/">Mesocycle</a> · <a href="#vi">Tiếng Việt</a></p>
+
+    <h1>Privacy Policy</h1>
+    <p class="muted">Effective 1 November 2026</p>
+    <p>Mesocycle is a planning app that re-plans your day when life breaks the plan. It is run by one person, Pham Nguyen Minh Tri, a student in Vietnam, and is an open source project built for a hackathon. Questions and requests: <a href="mailto:minhtriphamnguyen69@gmail.com">minhtriphamnguyen69@gmail.com</a>.</p>
+    <p>You must be 18 or older to use Mesocycle.</p>
+
+    <h2>What we collect and where it goes</h2>
+    <div class="wrap"><table>
+      <tr><th>Data</th><th>Why</th><th>Where it is kept</th><th>How long</th></tr>
+      <tr><td>Your plan: roles, goals, classes, tasks, wake and sleep times, what you finished, usage counts</td><td>To run the app</td><td>In your browser. Also on our server if you sign in</td><td>Until you delete it</td></tr>
+      <tr><td>Google account: ID, email, name</td><td>To sign you in and find your saved plan</td><td>Email and name: on our server, in your sign-in session. ID: with your saved plan</td><td>Session: 30 days or until you sign out. ID: until you delete your data</td></tr>
+      <tr><td>What you type or say, and photos you add</td><td>To let the AI build and change your plan</td><td>We do not save the original words, recording or photo. Anything the AI reads from them and puts in your plan is kept as your plan</td><td>See "AI providers" below</td></tr>
+      <tr><td>Feedback you send</td><td>To improve the app, and as a summary in the hackathon submission</td><td>On our server, not tied to your account. Your own words may still identify you</td><td>No automatic deletion. Please leave out personal details</td></tr>
+      <tr><td>IP address</td><td>To limit AI use per visitor and to deliver the site</td><td>We do not save it. Cloudflare and Google receive it as part of each request</td><td>Set by those companies</td></tr>
+    </table></div>
+
+    <h2>Who receives your data</h2>
+    <ul>
+      <li><b>AI providers.</b> Text and your plan are sent to Meta (Meta Model API) to run the AI. Voice recordings and photos always go to Meta. If you choose Muse Spark Open, text and your plan go to Baseten instead. Meta states that it does not use content from the Standard services we use to train its models. It keeps content as needed to provide the service and to review safety and abuse, and does not publish a fixed period. Baseten states that it does not store inputs or outputs of requests like ours and does not use them for training.</li>
+      <li><b>Cloudflare</b> hosts the app and stores saved data, encrypted at rest. It may keep request logs, which can include your IP address.</li>
+      <li><b>Google</b> provides sign-in, and the app page loads its font from Google. Google receives your IP address when this happens, including before you sign in.</li>
+    </ul>
+    <p>These companies process data outside Vietnam, including in the United States.</p>
+    <p>A photo is sent as soon as you choose it in "What changed?". A voice note is sent as soon as you stop recording.</p>
+    <p>Your Google name, email and ID are not sent to AI providers. We do not sell your data, use it for advertising, or share it with anyone else unless the law requires it. Mesocycle has no ads and no analytics tools.</p>
+
+    <h2>Who can read it</h2>
+    <p>Saved data is not end-to-end encrypted, so the operator can technically read it. It is used only to run the app, fix problems, and report total usage numbers with no names in them.</p>
+
+    <h2>Please do not send sensitive information</h2>
+    <p>Do not put health details, passwords, ID numbers or other people's private information in your plan, your messages or your photos. Crop photos so they show only your schedule. Mesocycle is for planning time and gives no medical, mental health, nutrition or training advice. The AI can be wrong, so check its plans.</p>
+
+    <h2>Your browser</h2>
+    <p>The app stores your plan and settings in your browser's local storage, and keeps a copy of its pages for offline use. While the app is open it sends your plan to our server to do its calculations, about once a minute. This is not saved unless you are signed in.</p>
+    <p>When you sign in, a plan already in this browser is uploaded to your account if you have no saved plan yet. If you do have one, it replaces the plan in this browser. If you use two devices, the latest save wins.</p>
+    <p> Mesocycle sets no cookies of its own. Google sign-in may set its own. Clearing your site data removes what is stored on that device.</p>
+
+    <h2>Your rights and how to delete your data</h2>
+    <ul>
+      <li>See and correct your plan at any time in the app.</li>
+      <li>Delete: while signed in, press <b>Delete my data</b> in the app. This removes your saved plan from our server and clears that browser. A session on another device ends within 30 days; sign out there as well.</li>
+      <li>Signing out clears that browser but does not delete your saved plan.</li>
+      <li>You can ask us for a copy of your data, withdraw your consent, or object to or limit how we process it, by email. To help us find your record, send the request from the Google account you used, or sign in and press Delete my data yourself. Vietnam's Law on Personal Data Protection gives you these rights, and we reply within the time it sets.</li>
+    </ul>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, we update the date above. If we change how your Google data is used, we will tell you in the app and ask for your agreement first.</p>
+
+    <hr id="vi">
+
+    <h1>Chính sách quyền riêng tư</h1>
+    <p class="muted">Có hiệu lực từ 01/11/2026</p>
+    <p>Mesocycle là ứng dụng xếp lại lịch khi kế hoạch trong ngày bị vỡ. Ứng dụng do một cá nhân vận hành: Phạm Nguyễn Minh Trí, sinh viên tại Việt Nam. Đây là dự án mã nguồn mở làm cho một cuộc thi hackathon. Mọi câu hỏi và yêu cầu gửi về <a href="mailto:minhtriphamnguyen69@gmail.com">minhtriphamnguyen69@gmail.com</a>.</p>
+    <p>Bạn phải từ đủ 18 tuổi mới được dùng Mesocycle.</p>
+
+    <h2>Dữ liệu thu thập và nơi lưu</h2>
+    <div class="wrap"><table>
+      <tr><th>Dữ liệu</th><th>Để làm gì</th><th>Lưu ở đâu</th><th>Bao lâu</th></tr>
+      <tr><td>Kế hoạch của bạn: vai trò, mục tiêu, lịch học, việc, giờ dậy và ngủ, việc đã xong, số liệu sử dụng</td><td>Để app hoạt động</td><td>Trên trình duyệt của bạn. Nếu đăng nhập thì lưu thêm trên máy chủ</td><td>Tới khi bạn xoá</td></tr>
+      <tr><td>Tài khoản Google: mã định danh, email, tên</td><td>Để đăng nhập và tìm đúng kế hoạch của bạn</td><td>Email và tên: trên máy chủ, trong phiên đăng nhập. Mã định danh: đi cùng kế hoạch đã lưu</td><td>Phiên: 30 ngày hoặc tới khi đăng xuất. Mã định danh: tới khi bạn xoá dữ liệu</td></tr>
+      <tr><td>Nội dung bạn gõ, nói và ảnh bạn thêm</td><td>Để AI dựng và chỉnh kế hoạch</td><td>Không lưu nguyên văn, bản ghi âm hay ảnh gốc. Những gì AI đọc được và đưa vào kế hoạch được lưu như kế hoạch</td><td>Xem mục "Nhà cung cấp AI" bên dưới</td></tr>
+      <tr><td>Góp ý bạn gửi</td><td>Để cải thiện app, và tóm tắt trong bài nộp hackathon</td><td>Trên máy chủ, không gắn với tài khoản. Nội dung bạn viết vẫn có thể cho biết bạn là ai</td><td>Không tự xoá. Vui lòng không ghi thông tin cá nhân</td></tr>
+      <tr><td>Địa chỉ IP</td><td>Để giới hạn lượt dùng AI và tải trang</td><td>App không lưu. Cloudflare và Google nhận IP theo từng yêu cầu</td><td>Do các công ty đó quy định</td></tr>
+    </table></div>
+
+    <h2>Ai nhận dữ liệu của bạn</h2>
+    <ul>
+      <li><b>Nhà cung cấp AI.</b> Văn bản và kế hoạch được gửi tới Meta (Meta Model API) để AI xử lý. Ghi âm và ảnh luôn gửi tới Meta. Nếu bạn chọn Muse Spark Open, văn bản và kế hoạch gửi tới Baseten thay vì Meta. Meta công bố không dùng nội dung từ dịch vụ Standard mà app đang dùng để huấn luyện mô hình. Meta giữ nội dung khi cần để cung cấp dịch vụ và rà soát an toàn, lạm dụng, và không công bố thời hạn cụ thể. Baseten công bố không lưu đầu vào, đầu ra của loại yêu cầu app đang dùng và không dùng chúng để huấn luyện.</li>
+      <li><b>Cloudflare</b> chạy app và lưu dữ liệu, có mã hoá khi lưu. Cloudflare có thể giữ log yêu cầu, trong đó có thể có địa chỉ IP.</li>
+      <li><b>Google</b> cung cấp đăng nhập, và trang app tải font từ Google. Google nhận địa chỉ IP của bạn lúc đó, kể cả trước khi bạn đăng nhập.</li>
+    </ul>
+    <p>Các công ty này xử lý dữ liệu ở ngoài Việt Nam, trong đó có Hoa Kỳ.</p>
+    <p>Ảnh được gửi ngay khi bạn chọn ở ô "Có gì thay đổi?". Ghi âm được gửi ngay khi bạn dừng ghi.</p>
+    <p>Tên, email và mã định danh Google không được gửi cho nhà cung cấp AI. App không bán dữ liệu, không dùng cho quảng cáo, không chia sẻ cho bên nào khác trừ khi pháp luật yêu cầu. Mesocycle không có quảng cáo và không dùng công cụ phân tích.</p>
+
+    <h2>Ai đọc được dữ liệu</h2>
+    <p>Dữ liệu đã lưu không được mã hoá đầu cuối, nên về mặt kỹ thuật người vận hành đọc được. Dữ liệu chỉ được dùng để vận hành app, sửa lỗi và báo cáo số liệu sử dụng tổng hợp, không có tên người.</p>
+
+    <h2>Đừng gửi thông tin nhạy cảm</h2>
+    <p>Không đưa thông tin sức khoẻ, mật khẩu, số giấy tờ hay thông tin riêng của người khác vào kế hoạch, tin nhắn hoặc ảnh. Hãy cắt ảnh để chỉ còn phần lịch. Mesocycle chỉ giúp sắp xếp thời gian, không tư vấn y tế, sức khoẻ tinh thần, dinh dưỡng hay tập luyện. AI có thể sai, nên hãy kiểm tra lại kế hoạch.</p>
+
+    <h2>Trên trình duyệt của bạn</h2>
+    <p>App lưu kế hoạch và cài đặt trong bộ nhớ trình duyệt, và giữ một bản các trang để dùng khi mất mạng. Khi app đang mở, kế hoạch được gửi lên máy chủ để tính toán, khoảng mỗi phút một lần. Phần này không được lưu nếu bạn chưa đăng nhập.</p>
+    <p>Khi đăng nhập, nếu tài khoản chưa có kế hoạch đã lưu thì kế hoạch trên trình duyệt được tải lên tài khoản. Nếu đã có, bản đã lưu sẽ thay thế kế hoạch trên trình duyệt. Dùng hai thiết bị thì lần lưu sau cùng được giữ.</p>
+    <p> Mesocycle không tự đặt cookie. Đăng nhập Google có thể đặt cookie của Google. Xoá dữ liệu trang web sẽ xoá những gì lưu trên thiết bị đó.</p>
+
+    <h2>Quyền của bạn và cách xoá dữ liệu</h2>
+    <ul>
+      <li>Xem và sửa kế hoạch bất cứ lúc nào trong app.</li>
+      <li>Xoá: khi đang đăng nhập, bấm <b>Xoá dữ liệu của tôi</b> trong app. Thao tác này xoá kế hoạch đã lưu trên máy chủ và xoá dữ liệu trên trình duyệt đó. Phiên trên thiết bị khác hết hạn trong vòng 30 ngày; hãy đăng xuất ở đó nữa.</li>
+      <li>Đăng xuất sẽ xoá dữ liệu trên trình duyệt đó, nhưng không xoá kế hoạch đã lưu.</li>
+      <li>Bạn có thể gửi email để xin bản sao dữ liệu, rút lại sự đồng ý, phản đối hoặc hạn chế việc xử lý. Để dễ tìm đúng hồ sơ, hãy gửi từ tài khoản Google bạn đã dùng, hoặc đăng nhập và tự bấm Xoá dữ liệu của tôi. Luật Bảo vệ dữ liệu cá nhân của Việt Nam cho bạn các quyền này, và yêu cầu sẽ được phản hồi trong thời hạn luật định.</li>
+    </ul>
+
+    <h2>Thay đổi</h2>
+    <p>Khi chính sách thay đổi, ngày ở đầu trang sẽ được cập nhật. Nếu thay đổi cách dùng dữ liệu Google, app sẽ báo trong ứng dụng và xin bạn đồng ý trước.</p>
+  </main>
+</body>
+</html>

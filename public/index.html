@@ -216,7 +216,7 @@
     <section class="card" id="account" style="padding:10px 16px">
       <div class="row" style="justify-content:space-between">
         <span class="hint" id="account-text" style="margin:0"></span>
-        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button></div>
+        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button><button class="small" id="delete-data" data-t="deleteData" hidden></button></div>
       </div>
     </section>
     </div>
@@ -240,6 +240,8 @@
       </div>
     </div>
 
+    <p class="hint" style="text-align:center"><a href="/privacy" data-t="privacyLink" style="color:var(--accent)"></a></p>
+
     <section class="card" id="edit-bar" hidden>
       <div class="row">
         <button class="primary" id="edit-save" data-t="saveEdits"></button>
@@ -262,7 +264,7 @@
         tryDemo: '▶ Try the demo: a broken afternoon', hideIntro: 'Hide', setupBtn: '✨ Set up my week',
         setupTitle: 'Set up my week', build: 'Build my week', cancel: 'Cancel', rebuild: 'Rebuild my week', toDemo: 'Back to the demo day',
         setupHint: 'Describe your week in your own words, or say it. Add a photo of your timetable if you have one. Mesocycle builds your roles, weekly minimums, fixed classes and work blocks.',
-        setupPlaceholder: 'e.g. First-year student. Study 20 hours a week (never under 12), my part-time job 8 hours, gym 4 times, call home twice. Calculus Tue 6:45 to 10:10, Algebra Wed 6:00 to 10:10. Midterms on Nov 8. Up at 6:30, sleep at 11.',
+        setupPlaceholder: 'e.g. First-year student. Study 20 hours a week (never under 12), my part-time job 8 hours, gym 3 times, call home twice. Biology Mon 8:00 to 11:00, Chemistry Thu 13:00 to 16:00. Finals on Dec 20. Up at 7, sleep at 11:30.',
         building: 'Muse Spark is building your week...', photoAdded: 'photo added', today: 'Today',
         now: 'Now', next: 'Next', nothingLeft: 'Nothing left that fits today.',
         debtNote: 'Unfinished work is kept as debt and comes back when there is real free time.',
@@ -290,7 +292,7 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan stays on this browser.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan is saved in this browser. AI requests go to the providers in the privacy policy.', privacyLink: 'Privacy', deleteData: 'Delete my data', deleteAsk: 'Delete your saved plan from the server and this browser? This cannot be undone.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
         weekTab: 'Week', goalsTab: 'Goals', role: 'Role', planned: 'Planned', actual: 'Actual',
         reviewTitle: 'Week review', reviewBtn: 'Review this week', reviewLast: 'Last week', keepWeek: 'Keep the same week',
         reviewLine: (d, n, h) => `${d} of ${n} blocks done. ${h}h of debt carried over.`,
@@ -323,7 +325,7 @@
         tryDemo: '▶ Thử demo: một buổi chiều bị vỡ', hideIntro: 'Ẩn', setupBtn: '✨ Lập tuần của tôi',
         setupTitle: 'Lập tuần của tôi', build: 'Lập tuần', cancel: 'Huỷ', rebuild: 'Lập lại tuần', toDemo: 'Quay lại ngày demo',
         setupHint: 'Kể về tuần của bạn bằng lời của bạn, gõ hoặc nói. Có ảnh thời khoá biểu thì thêm vào. Mesocycle sẽ dựng vai trò, mức tối thiểu mỗi tuần, lịch học cố định và các block việc.',
-        setupPlaceholder: 'Ví dụ: Sinh viên năm nhất. Học 20 tiếng một tuần (không dưới 12), làm thêm 8 tiếng, gym 4 buổi, gọi về nhà 2 lần. Thứ 3 học Giải tích 6h45 đến 10h10, thứ 4 Đại số 6h đến 10h10. Thi giữa kỳ 8/11. Dậy 6h30, ngủ 23h.',
+        setupPlaceholder: 'Ví dụ: Sinh viên năm nhất. Học 20 tiếng một tuần (không dưới 12), làm thêm 8 tiếng, gym 3 buổi, gọi về nhà 2 lần. Thứ 2 học Sinh 8h đến 11h, thứ 5 Hoá 13h đến 16h. Thi cuối kỳ 20/12. Dậy 7h, ngủ 23h30.',
         building: 'Muse Spark đang dựng tuần của bạn...', photoAdded: 'đã thêm ảnh', today: 'Hôm nay',
         now: 'Bây giờ', next: 'Tiếp theo', nothingLeft: 'Hôm nay không còn việc nào vừa.',
         debtNote: 'Việc chưa làm được giữ lại thành nợ, quay lại khi có giờ trống thật.',
@@ -351,7 +353,7 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này. Yêu cầu AI được gửi tới các nhà cung cấp nêu trong chính sách quyền riêng tư.', privacyLink: 'Quyền riêng tư', deleteData: 'Xoá dữ liệu của tôi', deleteAsk: 'Xoá kế hoạch đã lưu trên máy chủ và trình duyệt này? Không thể hoàn tác.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
         weekTab: 'Tuần', goalsTab: 'Mục tiêu', role: 'Vai trò', planned: 'Kế hoạch', actual: 'Thực tế',
         reviewTitle: 'Tổng kết tuần', reviewBtn: 'Tổng kết tuần này', reviewLast: 'Tuần trước', keepWeek: 'Giữ nguyên tuần cũ',
         reviewLine: (d, n, h) => `Xong ${d} trên ${n} block. Chuyển sang ${h} giờ nợ.`,
@@ -411,6 +413,7 @@
     function renderAccount() {
       $('account-text').textContent = (account ? t('signedIn')(account.name) : googleClientId ? t('signedOut') : t('authOff')) + (stats.days.length ? ' ' + t('statsLine')(stats) : '');
       $('logout').hidden = !account;
+      $('delete-data').hidden = !account;
       $('logout').textContent = t('logout');
       $('gsi').hidden = !!account || !googleClientId;
     }
@@ -1101,9 +1104,24 @@
     $('logout').onclick = async () => {
       await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: '{}' }).catch(() => {});
       if (window.google) google.accounts.id.disableAutoSelect();
-      signOutLocal();
+      clearLocal();
       location.reload();
     };
+    // Nothing of a signed-in person stays behind on a shared computer.
+    function clearLocal() {
+      clearTimeout(saveTimer);
+      try { Object.keys(localStorage).filter((k) => k.startsWith('meso-')).forEach((k) => localStorage.removeItem(k)); } catch {}
+    }
+    $('delete-data').onclick = async () => {
+      if (!confirm(t('deleteAsk'))) return;
+      try {
+        const res = await fetch('/api/data', { method: 'DELETE', headers: authHeaders() });
+        if (!res.ok) throw new Error();
+      } catch { $('account-text').textContent = t('errNet'); return; }
+      clearLocal();
+      location.reload();
+    };
+
     $('fb-send').onclick = async () => {
       const text = $('fb-text').value.trim();
       if (!text) return;
