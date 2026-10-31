@@ -2,7 +2,7 @@
 // API keys live only here (env), never in the browser.
 // For now the browser keeps the plan state and sends it with each request;
 // it moves to D1 storage before the live deploy.
-import { chat } from './models.js';
+import { chat, transcribe } from './models.js';
 import { runAgent } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
@@ -20,10 +20,17 @@ const view = (state) => runTool(state, 'get_state', {}).result;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
-    if (request.method === 'POST' && !body) return json({ ok: false, error: 'Body must be JSON' }, 400);
-
     try {
+      // Voice check-in: the browser sends a WAV clip, we return the text.
+      if (url.pathname === '/api/transcribe' && request.method === 'POST') {
+        const wav = await request.arrayBuffer();
+        if (wav.byteLength > 32e6) return json({ ok: false, error: 'Recording too long' }, 413);
+        return json({ ok: true, ...(await transcribe(env, wav)) });
+      }
+
+      const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
+      if (request.method === 'POST' && !body) return json({ ok: false, error: 'Body must be JSON' }, 400);
+
       if (url.pathname === '/api/health') {
         return json({ ok: true, provider: env.MODEL_PROVIDER || 'meta' });
       }
@@ -57,14 +64,16 @@ export default {
 
       // Free text (later: voice) goes to the agent.
       if (url.pathname === '/api/agent' && body) {
-        const provider = body.provider || url.searchParams.get('provider');
+        // Photos always go to Muse Spark (image understanding).
+        const provider = body.image ? 'meta' : body.provider || url.searchParams.get('provider');
+        if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
         let modelMs = 0;
         const chatFn = async (messages, tools) => {
           const out = await chat(env, { messages, tools, maxTokens: 4000 }, provider);
           modelMs += out.ms;
           return out;
         };
-        const out = await runAgent({ state: body.state, userText: String(body.text || ''), chatFn });
+        const out = await runAgent({ state: body.state, userText: String(body.text || ''), chatFn, image: body.image || null });
         return json({ ok: true, ...out, modelMs, view: view(out.state) });
       }
 

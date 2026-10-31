@@ -15,6 +15,10 @@ How you work:
 - Ask the user ONLY when work must be cut, moved to another day, or a
   deadline or floor is at risk. Offer one default and one alternative.
 - Missed work becomes debt; never push it into a specific future slot.
+- A photo (timetable, syllabus, to-do list): add only what happens TODAY.
+  Classes and meetings with a time are add_fixed; tasks are add_item.
+- When proposing cuts, check budgetMin and usedMin in the plan so the
+  first proposal already fits.
 
 Style: reply in the user's language. Short, calm, no blame, no guilt
 words. At most 3 sentences plus the proposal.
@@ -28,14 +32,18 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 
 // chatFn(messages, tools) -> { text, toolCalls, message }. Injected so tests
 // can use a scripted fake model and never spend credits.
-export async function runAgent({ state, userText, chatFn, history = [] }) {
+// image: optional data URL (a timetable, a syllabus, a to-do list photo).
+export async function runAgent({ state, userText, chatFn, history = [], image = null }) {
   // Sending the plan up front saves one model round trip (a get_state call).
   const plan = runTool(state, 'get_state', {}).result;
   const content = `${userText}
 
 Current plan:
 ${JSON.stringify(plan)}`;
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history, { role: 'user', content }];
+  const user = image
+    ? { role: 'user', content: [{ type: 'text', text: content }, { type: 'image_url', image_url: { url: image } }] }
+    : { role: 'user', content };
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...history, user];
   const trace = [];
   let proposal = null;
   let rejections = 0;

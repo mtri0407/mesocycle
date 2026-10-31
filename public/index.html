@@ -61,6 +61,9 @@
       <textarea id="say" placeholder="e.g. I slept through the afternoon, and there's a class meeting at 7pm for an hour"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" id="send">Re-plan</button>
+        <button id="mic" title="Voice check-in (Muse Voice Transcribe)">🎙 Speak</button>
+        <button id="photo" title="Add today's classes or tasks from a photo (Muse Spark)">📷 Photo</button>
+        <input type="file" id="photo-file" accept="image/*" capture="environment" hidden>
         <select id="provider" title="Model">
           <option value="meta">Muse Spark</option>
           <option value="open">Muse Spark Open</option>
@@ -159,14 +162,76 @@
       apply(await api('/api/tool', { state, name: 'update_item', args }));
     }
 
-    $('send').onclick = async () => {
-      const text = $('say').value.trim();
+    // Voice check-in: record, convert to 16 kHz mono WAV (what the
+    // transcription API accepts), transcribe, then send the text to the agent.
+    let recorder = null;
+    $('mic').onclick = async () => {
+      if (recorder) { recorder.stop(); return; }
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch { $('status').textContent = 'Microphone not allowed'; return; }
+      const chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        recorder = null;
+        $('mic').textContent = '🎙 Speak';
+        $('status').textContent = 'Transcribing...';
+        try {
+          const wav = await toWav(new Blob(chunks));
+          const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error);
+          $('say').value = data.text;
+          if (data.text) send(); else $('status').textContent = 'Did not catch that, try again';
+        } catch (e) { $('status').textContent = e.message; }
+      };
+      recorder.start();
+      $('mic').textContent = '⏹ Stop';
+      $('status').textContent = 'Listening...';
+    };
+
+    async function toWav(blob) {
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+      ctx.close();
+      const pcm = audio.getChannelData(0);
+      const buf = new ArrayBuffer(44 + pcm.length * 2);
+      const v = new DataView(buf);
+      const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+      str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 16000, true); v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+      str(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+      pcm.forEach((s, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true));
+      return buf;
+    }
+
+    // Photo: shrink it in the browser, then hand it to the agent (Muse Spark reads images).
+    $('photo').onclick = () => $('photo-file').click();
+    $('photo-file').onchange = async () => {
+      const file = $('photo-file').files[0];
+      $('photo-file').value = '';
+      if (!file) return;
+      const img = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const image = canvas.toDataURL('image/jpeg', 0.85);
+      send($('say').value.trim() || 'Add what is in this photo to today.', image);
+    };
+
+    $('send').onclick = () => send();
+
+    async function send(textArg, image = null) {
+      const text = (textArg ?? $('say').value).trim();
       if (!text) return;
       $('send').disabled = true;
-      $('status').textContent = 'Thinking...';
+      $('status').textContent = image ? 'Reading the photo...' : 'Thinking...';
       $('answer').innerHTML = '';
       try {
-        const data = await api('/api/agent', { state, text, provider: $('provider').value });
+        const data = await api('/api/agent', { state, text, image, provider: $('provider').value });
         apply(data);
         $('say').value = '';
         showAnswer(data);
@@ -176,7 +241,7 @@
       } finally {
         $('send').disabled = false;
       }
-    };
+    }
 
     function showAnswer(data) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;

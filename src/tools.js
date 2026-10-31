@@ -94,6 +94,8 @@ function summary(state) {
     }),
     doesNotFit: plan.cuts.map((id) => ({ id, title: title(id) })),
     needsUser: plan.needsUser,
+    budgetMin: plan.budgetMin,
+    usedMin: plan.usedMin,
     floorAtRisk: plan.floorBreaches,
     debtMinutes: debtByRole(state.queue),
     roles: state.roles.map((r) => ({ id: r.id, name: r.name, priority: r.priority, floorMin: r.floorMin || 0, weekSoFarMin: (state.week[r.id]?.done) || 0 })),
