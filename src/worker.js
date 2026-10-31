@@ -10,6 +10,7 @@ import { view } from '../public/core/handlers.js';
 import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, CHECKIN_PROMPT, checkinBrief, mondayOf, weekReview, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from '../public/core/setup.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
 import { voiceProxy } from './voice.js';
+import { IMPORT_FORMAT, importPrompt, readImport, documentPart } from './import.js';
 import { saveReminders, deleteReminders, sendDue } from './push.js';
 
 function json(data, status = 200) {
@@ -23,8 +24,9 @@ const AGENT_EFFORT = 'low'; // docs/BENCHMARK.md: the lowest level that kept the
 
 // Guard for routes that call a model or write to KV: a limit per visitor and
 // per network (Cloudflare rate limit bindings), and a daily ceiling (KV).
-const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/model-check', '/api/feedback', '/api/reminders'];
+const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/import', '/api/model-check', '/api/feedback', '/api/reminders'];
 const MAX_IMAGE_CHARS = 8e6;
+const MAX_FILE_CHARS = 14e6; // about 10 MB
 const SOFT_CAP = 1200; // about 10 USD a day of Meta credit; past it, the open model answers
 const HARD_CAP = 3000;
 const RATE_ERROR = { ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' };
@@ -153,6 +155,20 @@ export default {
           await writer.close();
         })());
         return new Response(readable, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } });
+      }
+
+      // A syllabus or a photo in, a list of dated items out, for the person to tick.
+      if (url.pathname === '/api/import' && body) {
+        if (String(body.file).length > MAX_FILE_CHARS) return json({ ok: false, error: 'File too large' }, 413);
+        const part = documentPart(String(body.file), body.name);
+        if (!part) return json({ ok: false, error: 'Send a PDF or an image' }, 400);
+        // Only Meta's API reads PDFs, so private mode cannot send one anywhere.
+        if (part.type === 'file' && preferred === 'open') return json({ ok: false, code: 'private-pdf', error: 'PDF needs Muse Spark' }, 400);
+        const out = await chatSafe(env, {
+          messages: [{ role: 'user', content: [{ type: 'text', text: importPrompt(String(body.date)) }, part] }],
+          maxTokens: 6000, effort: 'low', format: IMPORT_FORMAT, timeoutMs: 45_000,
+        }, part.type === 'file' ? 'meta' : preferred);
+        return json({ ok: true, ...readImport(out.text, String(body.date)) });
       }
 
       // Morning check-in: read-only, no tools, so it cannot change the plan.

@@ -5,12 +5,13 @@ const MAX_SESSION_MS = 120_000;
 const MAX_CALL_MS = 600_000;
 const MAX_FRAME_BYTES = 64_000;
 
-export const handshake = (key, call = false) => ({
+export const handshake = (key, call = false, keywords = []) => ({
   authorization: { accessToken: `Bearer ${key}` },
   audioEncoding: 'PCM_24KHZ',
   model: 'muse-voice-transcribe-1.0',
   mode: call ? 'ENDPOINTING' : 'PUSH_TO_TALK', // a call needs the model to hear when a turn ends
   languageBias: ['Vietnamese', 'English'],
+  ...(keywords.length ? { keywords } : {}),
 });
 
 // The only frame without a type is the handshake reply. Everything else that
@@ -24,6 +25,13 @@ export function readUpstream(text) {
   if (m.type === 'speechComplete') return { kind: 'send', msg: { type: 'turn', text: String(m.transcript || '') } };
   if (m.type === 'error') return { kind: 'send', msg: { type: 'error' } };
   return { kind: 'ignore' };
+}
+
+export function readKeywords(text) {
+  try {
+    const { keywords } = JSON.parse(text);
+    return (Array.isArray(keywords) ? keywords : []).filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().slice(0, 60)).slice(0, 40);
+  } catch { return []; }
 }
 
 export async function voiceProxy(env, call = false) {
@@ -51,7 +59,8 @@ export async function voiceProxy(env, call = false) {
   server.addEventListener('message', ({ data }) => {
     order = order.then(async () => {
       if (typeof data === 'string') {
-        if (data === '{"type":"endStream"}') toMeta(data); // the only text frame allowed through
+        if (data === '{"type":"endStream"}') toMeta(data);
+        else start(readKeywords(data));
         return;
       }
       const audio = data instanceof Blob ? await data.arrayBuffer() : data;
@@ -71,6 +80,14 @@ export async function voiceProxy(env, call = false) {
   meta.addEventListener('close', closeAll);
   meta.addEventListener('error', closeAll);
 
-  meta.send(JSON.stringify(handshake(env.MODEL_API_KEY, call)));
+  // The browser may first send words from the plan (role and task names) so
+  // they are heard correctly. It gets half a second, then the session starts.
+  let started = false;
+  const start = (keywords) => {
+    if (started) return;
+    started = true;
+    meta.send(JSON.stringify(handshake(env.MODEL_API_KEY, call, keywords)));
+  };
+  setTimeout(() => start([]), 500);
   return new Response(null, { status: 101, webSocket: client });
 }

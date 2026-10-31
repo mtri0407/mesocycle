@@ -51,3 +51,19 @@ test('oversized images are refused before any model call', async () => {
   const res = await worker.fetch(new Request('http://x/api/agent', { method: 'POST', body }), { FEEDBACK: fakeKv({}) }, {});
   assert.equal(res.status, 413);
 });
+
+test('import: only documents, only well-formed future dates, and private mode never sends a PDF', async () => {
+  const post = (b) => worker.fetch(new Request('http://x/api/import', { method: 'POST', body: JSON.stringify(b) }), { FEEDBACK: fakeKv({}), MODEL_API_KEY: 'k' }, {});
+  assert.equal((await post({ file: 'data:text/html;base64,AAAA', date: '2026-11-01' })).status, 400);
+  const res = await post({ file: 'data:application/pdf;base64,AAAA', date: '2026-11-01', provider: 'open' });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).code, 'private-pdf');
+  const { readImport } = await import('../src/import.js');
+  const out = readImport(JSON.stringify({
+    deadlines: [{ title: 'Midterm', date: '2026-11-26', estimateHours: 8 }, { title: 'Past', date: '2026-01-01', estimateHours: 2 }, { title: 'Bad', date: 'soon', estimateHours: 2 }],
+    events: [{ title: 'Exam', date: '2026-11-26', start: '13:00', end: '15:00' }, { title: 'No time', date: '2026-11-27', start: null, end: null }],
+  }), '2026-11-01');
+  assert.deepEqual(out.deadlines, [{ title: 'Midterm', date: '2026-11-26', minutes: 480 }]);
+  assert.deepEqual(out.events.map((e) => e.title), ['Exam']);
+  assert.deepEqual(readImport('not json', '2026-11-01'), { deadlines: [], events: [] });
+});

@@ -21,7 +21,6 @@ async function open({ time = '2026-11-03T10:00:00+07:00', viewport = { width: 39
   page.errors = [];
   page.on('request', (r) => { if (new URL(r.url()).pathname.startsWith('/api/')) page.apiCalls.push(new URL(r.url()).pathname); });
   page.on('pageerror', (e) => page.errors.push(e.message));
-  page.on('dialog', (d) => d.accept());
   await page.goto(BASE);
   await page.waitForSelector('#now-card .now-title');
   return page;
@@ -148,7 +147,7 @@ await check('after midnight it is still the same day', async () => {
 });
 
 await check('offline: the app reloads and keeps planning, the AI says it needs a connection', async () => {
-  const p = await open({ sw: 'allow', time: new Date().toISOString() });
+  const p = await open({ sw: 'allow', time: new Date().toISOString(), seed: { 'meso-consent': '2026-11-01' } });
   await p.evaluate(() => navigator.serviceWorker.ready);
   await p.reload();
   await p.waitForSelector('#now-card .now-title');
@@ -209,7 +208,46 @@ await check('finishing everything offers one more block from the backlog', async
   await p.context().close();
 });
 
+await check('first screen: the demo is one tap away, with no sign-in and no age question', async () => {
+  const p = await open();
+  assert.ok(await p.locator('#try').isVisible());
+  assert.match(await p.textContent('.hero'), /Say what happened/);
+  assert.ok(!(await p.locator('#consent-sheet').evaluate((d) => d.open)));
+  await p.context().close();
+});
+
+await check('typing your own words asks for consent once, in the app', async () => {
+  const p = await open();
+  await p.route('**/api/agent', (r) => r.abort());
+  await p.fill('#say', 'hello');
+  await p.click('#send');
+  await p.waitForSelector('#consent-sheet[open]');
+  await p.click('#consent-no');
+  assert.equal(await p.inputValue('#say'), 'hello');
+  await p.click('#send');
+  await p.click('#consent-yes');
+  await p.waitForFunction(() => localStorage.getItem('meso-consent'));
+  await p.context().close();
+});
+
 if (AI) {
+  await check('AI: a sample syllabus becomes a list to approve, then real deadlines', async () => {
+    const p = await open();
+    await p.click('#sample-open');
+    await p.waitForSelector('#sample-bar:not([hidden])');
+    await p.click('[data-tab=goals]');
+    await p.click('#import-sample');
+    await p.click('#consent-yes').catch(() => {});
+    await p.waitForSelector('#import-add', { timeout: 40000 });
+    assert.ok((await p.locator('.pick').count()) >= 5);
+    assert.match(await p.textContent('#import-add'), /Add \d+/);
+    const before = (await local(p, 'meso-template')).tasks.length;
+    await p.click('#import-add');
+    await p.waitForFunction((n) => JSON.parse(localStorage.getItem('meso-template')).tasks.length > n, before);
+    assert.deepEqual(p.errors, []);
+    await p.context().close();
+  });
+
   await check('AI: set up a week from a description, with goals', async () => {
     const p = await open();
     await p.click('#setup-open');

@@ -156,6 +156,19 @@
     .option.life { border-left: 3px solid var(--r1); }
     .option.both { border-left: 3px solid var(--ok); }
     .option ul { margin-top: 2px; }
+    .fab { position: fixed; z-index: 6; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); padding: 12px 18px; border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-fg); font-weight: 600; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+    @media (min-width: 760px) { .fab { bottom: 24px; right: calc(50% - 300px); } }
+    dialog { max-width: 420px; color: var(--fg); margin: auto; }
+    dialog::backdrop { background: rgba(0, 0, 0, .45); }
+    .hero { font-size: 30px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; margin: 2px 0 10px; }
+    .pick { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: flex-start; }
+    .pick input { margin-top: 4px; flex: none; }
+    .pick .hint { margin: 0; }
+    #thread { margin-top: 10px; font-size: 14px; }
+    #thread:empty { display: none; }
+    .turn { padding: 6px 10px; border-radius: 10px; margin-top: 6px; max-width: 90%; width: fit-content; }
+    .turn.me { background: var(--chip); margin-left: auto; }
+    .turn.ai { background: var(--tip); }
     .invite { text-align: center; padding: 28px 16px; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
@@ -211,7 +224,6 @@
       <textarea id="say"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" id="send" data-t="replan"></button>
-        <button id="call" data-t="callBtn"></button>
         <button id="mic"></button>
         <button id="photo" data-t="photo"></button>
         <input type="file" id="photo-file" accept="image/*" hidden>
@@ -221,6 +233,7 @@
       <p class="hint" id="private-hint" data-t="privateHint" hidden></p>
       <div id="status" class="hint"></div>
       <ol class="steps" id="live-steps"></ol>
+      <div id="thread"></div>
       <div id="answer"></div>
     </section>
 
@@ -274,6 +287,17 @@
 
     <div id="p-goals" hidden>
       <section class="card" id="goals-card"></section>
+      <section class="card" id="import-start" hidden>
+        <h2 data-t="importTitle"></h2>
+        <p class="hint" data-t="importIntro" style="margin-top:0"></p>
+        <div class="row">
+          <button class="primary" id="import-open" data-t="importBtn"></button>
+          <button id="import-sample" data-t="importSample"></button>
+        </div>
+        <input type="file" id="doc-file" accept="application/pdf,image/*" hidden>
+        <div class="hint" id="import-status"></div>
+      </section>
+      <section class="card" id="import-card" hidden></section>
       <div id="edit-goals" hidden>
         <details class="card"><summary data-t="editGoals"></summary><div id="ed-goals"></div><button class="small" data-add="goals" data-t="addGoal" style="margin-top:8px"></button></details>
       </div>
@@ -281,10 +305,16 @@
 
     <p class="hint" style="text-align:center"><a href="/privacy" data-t="privacyLink" style="color:var(--accent)"></a></p>
 
+    <dialog id="consent-sheet" class="card">
+      <p style="margin-top:0"><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></p>
+      <div class="row"><button class="primary" id="consent-yes" data-t="consentYes"></button><button id="consent-no" data-t="cancel"></button></div>
+    </dialog>
+
+    <button id="call" class="fab" data-t="callBtn"></button>
     <section class="card" id="call-box" hidden aria-live="polite">
       <div class="row" style="justify-content:space-between">
         <b id="call-phase"></b>
-        <button id="call-end" data-t="callEnd"></button>
+        <span class="row"><button class="small" id="call-stop" data-t="callStop" hidden></button><button id="call-end" data-t="callEnd"></button></span>
       </div>
       <p class="hint" id="call-live"></p>
       <p id="call-reply" style="margin:6px 0 0"></p>
@@ -305,18 +335,15 @@
     import { replan, applyEvent } from '/core/planner.js';
     import { checkPlan } from '/core/invariants.js';
     import { deadlineRadar } from '/core/radar.js';
+    import { runWeekTool } from '/core/week-tools.js';
     import { planDiff, isEmptyDiff } from '/core/diff.js';
 
     const T = {
       en: {
-        intro: `<h2>What is this?</h2>
-          <p style="margin:0">A planner that re-plans your day when life breaks the plan. This demo is the author's real Friday before midterms.</p>
-          <ul>
-            <li><b>Now</b> shows one thing to do. Tap Done, Need more time, or Can't do it, and the rest of the day slides.</li>
-            <li>When something changes, <b>say it or type it</b>. The AI agent re-plans and asks before cutting anything.</li>
-            <li>Sleep and your weekly minimum for family, training and work are protected.</li>
-          </ul>`,
-        tryDemo: '▶ Try the demo: a broken afternoon', hideIntro: 'Hide', setupBtn: '✨ Set up my week',
+        intro: `<div class="hero">Your day broke.<br>Say what happened.</div>
+          <p style="margin:0 0 6px">Other AI calendars optimize your work. Mesocycle protects what must not be sacrificed: your sleep, your people, your health.</p>
+          <p class="hint" style="margin:0 0 12px">A mesocycle is a planned block of weeks, built around how you really recover. This is that, for your life.</p>`,
+        tryDemo: '▶ Try it in 60 seconds', hideIntro: 'Hide', setupBtn: '✨ Set up my week',
         setupTitle: 'Set up my week', build: 'Build my week', cancel: 'Cancel', rebuild: 'Rebuild my week', toDemo: 'Back to the demo day',
         setupHint: 'Describe your week in your own words, or say it. Add a photo of your timetable if you have one. Mesocycle builds your roles, weekly minimums, fixed classes and work blocks.',
         setupPlaceholder: 'e.g. First-year student. Study 20 hours a week (never under 12), my part-time job 8 hours, gym 3 times, call home twice. Biology Mon 8:00 to 11:00, Chemistry Thu 13:00 to 16:00. Finals on Dec 20. Up at 7, sleep at 11:30.',
@@ -342,6 +369,9 @@
         privateOn: '🔒 More private', privateHint: 'Runs on Muse Spark Open through Baseten, which says it does not keep or train on your requests. Voice still goes to Meta.',
         kindWork: 'Commitment', kindLife: 'Life',
         recording: 'The AI is busy right now, so this is a recording of one real run.',
+        callStop: 'Interrupt', whichOne: 'Which one?', consentYes: 'I agree', pastBedtime: 'Past bedtime. See you tomorrow.',
+        importTitle: 'Add a syllabus', importIntro: 'Add a PDF or a photo of a syllabus, exam timetable or message. Muse Spark finds the dates, and you choose what to keep.', importBtn: '📎 Add a file', importSample: 'Try a sample syllabus',
+        importing: 'Muse Spark is reading it...', importEmpty: 'No dates found.', importHint: 'Untick anything you do not want. Nothing is added until you confirm.', importEstimate: (h) => `about ${h}h of work`, importAdd: (n) => `Add ${n}`, importDone: 'Added. The Week tab shows if any deadline is at risk.', importPrivate: 'PDFs need Muse Spark. Turn off More private, or add a photo.',
         pullMore: 'Take one more block', weekLine: (d, n, g) => `${d}h done, ${n}h today, goal ${g}h`, weekKey: 'Dark bar: done. Light bar: planned today. Thin line: your weekly minimum.',
         riskLine: (t, d, h) => `${t}, due ${d}, is ${h}h short.`, riskMore: (n) => `And ${n} more.`, riskFix: 'Sort it out', riskText: (t, d) => `The deadline for "${t}" on ${d} is at risk. What can give way?`,
         due: 'due', noRoom: 'no room today', receipt: (n, r, a, b) => `Code checked ${n} step${n === 1 ? '' : 's'} and refused ${r}. ${a} of ${b} promises holding.`, undo: '↩ Undo', undone: 'Back to how it was.',
@@ -386,14 +416,10 @@
         lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
       },
       vi: {
-        intro: `<h2>Đây là gì?</h2>
-          <p style="margin:0">Trợ lý xếp lại lịch khi kế hoạch bị vỡ. Bản demo là ngày thứ Sáu thật của tác giả trước kỳ thi giữa kỳ.</p>
-          <ul>
-            <li><b>Bây giờ</b> chỉ hiện một việc cần làm. Bấm Xong, Cần thêm giờ, hoặc Không làm được, phần còn lại tự trượt.</li>
-            <li>Có gì thay đổi thì <b>nói hoặc gõ</b>. Agent AI xếp lại, và luôn hỏi trước khi cắt việc.</li>
-            <li>Giờ ngủ và mức tối thiểu mỗi tuần cho gia đình, tập luyện, công việc luôn được giữ.</li>
-          </ul>`,
-        tryDemo: '▶ Thử demo: một buổi chiều bị vỡ', hideIntro: 'Ẩn', setupBtn: '✨ Lập tuần của tôi',
+        intro: `<div class="hero">Ngày của bạn vừa vỡ.<br>Cứ nói chuyện gì đã xảy ra.</div>
+          <p style="margin:0 0 6px">Các lịch AI khác tối ưu công việc. Mesocycle bảo vệ những thứ không được hy sinh: giấc ngủ, người thân, sức khoẻ.</p>
+          <p class="hint" style="margin:0 0 12px">Mesocycle là một khối nhiều tuần được lên kế hoạch theo cách bạn thật sự hồi phục. Đây là điều đó, cho cuộc sống của bạn.</p>`,
+        tryDemo: '▶ Thử ngay trong 60 giây', hideIntro: 'Ẩn', setupBtn: '✨ Lập tuần của tôi',
         setupTitle: 'Lập tuần của tôi', build: 'Lập tuần', cancel: 'Huỷ', rebuild: 'Lập lại tuần', toDemo: 'Quay lại ngày demo',
         setupHint: 'Kể về tuần của bạn bằng lời của bạn, gõ hoặc nói. Có ảnh thời khoá biểu thì thêm vào. Mesocycle sẽ dựng vai trò, mức tối thiểu mỗi tuần, lịch học cố định và các block việc.',
         setupPlaceholder: 'Ví dụ: Sinh viên năm nhất. Học 20 tiếng một tuần (không dưới 12), làm thêm 8 tiếng, gym 3 buổi, gọi về nhà 2 lần. Thứ 2 học Sinh 8h đến 11h, thứ 5 Hoá 13h đến 16h. Thi cuối kỳ 20/12. Dậy 7h, ngủ 23h30.',
@@ -419,6 +445,9 @@
         privateOn: '🔒 Riêng tư hơn', privateHint: 'Chạy trên Muse Spark Open qua Baseten, bên này công bố không lưu và không dùng yêu cầu của bạn để huấn luyện. Giọng nói vẫn đi qua Meta.',
         kindWork: 'Cam kết', kindLife: 'Cuộc sống',
         recording: 'AI đang bận, đây là bản ghi một lần chạy thật.',
+        callStop: 'Ngắt lời', whichOne: 'Bạn chọn cách nào?', consentYes: 'Tôi đồng ý', pastBedtime: 'Đã quá giờ ngủ. Mai tính tiếp nhé.',
+        importTitle: 'Thêm đề cương', importIntro: 'Thêm PDF hoặc ảnh đề cương, lịch thi, tin nhắn. Muse Spark tìm các mốc thời gian, bạn chọn giữ lại gì.', importBtn: '📎 Thêm tệp', importSample: 'Thử đề cương mẫu',
+        importing: 'Muse Spark đang đọc...', importEmpty: 'Không tìm thấy mốc thời gian nào.', importHint: 'Bỏ tích những gì bạn không muốn. Chưa có gì được thêm cho tới khi bạn xác nhận.', importEstimate: (h) => `khoảng ${h} giờ làm`, importAdd: (n) => `Thêm ${n} mục`, importDone: 'Đã thêm. Tab Tuần sẽ báo nếu có hạn nào gặp rủi ro.', importPrivate: 'PDF cần Muse Spark. Tắt Riêng tư hơn, hoặc thêm ảnh.',
         pullMore: 'Lấy thêm một việc', weekLine: (d, n, g) => `đã làm ${d}h, hôm nay ${n}h, mục tiêu ${g}h`, weekKey: 'Thanh đậm: đã làm. Thanh nhạt: dự kiến hôm nay. Vạch mảnh: mức tối thiểu tuần.',
         riskLine: (t, d, h) => `${t}, hạn ${d}, đang thiếu ${h} giờ.`, riskMore: (n) => `Còn ${n} hạn khác.`, riskFix: 'Xử lý', riskText: (t, d) => `Hạn "${t}" ngày ${d} đang bị đe doạ. Có thể bỏ bớt gì?`,
         due: 'hạn', noRoom: 'hôm nay không còn chỗ', receipt: (n, r, a, b) => `Code đã kiểm tra ${n} lệnh, từ chối ${r}. ${a} trên ${b} lời hứa đang giữ.`, undo: '↩ Hoàn tác', undone: 'Đã trả về như cũ.',
@@ -632,7 +661,7 @@
       try { res = await fetch(path, body ? { method: 'POST', headers: aiHeaders, body: JSON.stringify(body) } : {}); }
       catch { throw new Error(t('errNet')); }
       const data = await res.json().catch(() => ({}));
-      if (!data.ok && !data.state) throw new Error(errMsg(data));
+      if (!data.ok && !data.state) throw Object.assign(new Error(errMsg(data)), { code: data.code });
       return data;
     }
 
@@ -760,7 +789,7 @@
           <button data-act="more">${t('more')}</button>
           <button data-act="skip">${t('skip')}</button>
         </div>
-        <p class="hint">${t('nowHint')}</p>${paceLine(now)}` : `<h2>${t('now')}</h2><div class="now-title">${t('nothingLeft')}</div>
+        <p class="hint">${t('nowHint')}</p>${paceLine(now)}` : `<h2>${t('now')}</h2><div class="now-title">${state.now >= (state.settings?.sleep ?? 1380) ? t('pastBedtime') : t('nothingLeft')}</div>
         <p class="hint">${t('debtNote')}</p>${hasBacklog() ? `<button class="primary" id="pull-more">${t('pullMore')}</button>` : ''}`;
       if (!now && hasBacklog()) $('pull-more').onclick = async () => apply(await api('/api/more', { template, state }));
       if (now) $('now-card').querySelectorAll('button[data-act]').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
@@ -786,7 +815,7 @@
         const pct = (m) => Math.round((m / scale) * 100);
         return `<div class="floor" style="${rcStyle(r.id)}"><span><span class="dot"></span>${esc(r.name)}</span><span class="muted">${t('weekLine')(hrs(done), hrs(today), hrs(goal))}${debt[r.id] ? `, ${hrs(debt[r.id])}h ${t('debt')}` : ''}</span>
           <div class="bar" style="grid-column:1/3"><i style="width:${pct(done)}%"></i><i class="plan" style="width:${pct(today)}%"></i>${r.floorMin ? `<b class="tick" style="left:${pct(r.floorMin)}%" title="${t('floor')} ${hrs(r.floorMin)}h"></b>` : ''}</div></div>`;
-      }).join('') + (view.roles.some((r) => r.floorMin) ? `<p class="hint">${t('weekKey')}</p>` : '') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${hrs(d.shortMin)}h`}</p>`).join('');
+      }).join('') + (view.roles.some((r) => r.floorMin) ? `<p class="hint">${t('weekKey')}</p>` : '') + [...view.deadlines].sort((a, b) => a.ok - b.ok).slice(0, 5).map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${hrs(d.shortMin)}h`}</p>`).join('');
     }
 
     function recordDone(id, roleId, minutes) {
@@ -850,6 +879,7 @@
       tab = name;
       store.set('meso-tab', name);
       for (const p of ['today', 'week', 'goals']) $(`p-${p}`).hidden = p !== name;
+      $('call').hidden = name !== 'today' || !!callNow;
       document.querySelectorAll('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.tab === name); b.setAttribute('aria-selected', b.dataset.tab === name); });
       window.scrollTo({ top: 0 });
     }
@@ -1086,6 +1116,7 @@
 
     function renderEditors() {
       const real = mode === 'real' && !!template;
+      $('import-start').hidden = !real;
       $('edit-week').hidden = !real;
       $('edit-goals').hidden = !real;
       $('week-invite').hidden = real;
@@ -1184,6 +1215,76 @@
     };
     $('edit-cancel').onclick = () => { draft = null; $('edit-bar').hidden = true; renderEditors(); };
 
+    // Syllabus or photo in, dated items out. Nothing joins the plan until ticked.
+    let importList = null;
+    const readAsDataUrl = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    async function importDoc(file, name) {
+      if (!(await askConsent())) return;
+      const note = $('import-status');
+      note.textContent = t('importing');
+      $('import-open').disabled = $('import-sample').disabled = true;
+      try {
+        const data = file.type === 'application/pdf' ? await readAsDataUrl(file) : await shrink(file);
+        const out = await api('/api/import', { file: data, name, date: state.date, lang, provider: provider() });
+        if (!out.deadlines.length && !out.events.length) { note.textContent = t('importEmpty'); return; }
+        note.textContent = '';
+        importList = [
+          ...out.deadlines.map((d) => ({ ...d, kind: 'deadline', keep: true })),
+          ...out.events.map((e) => ({ ...e, kind: 'event', keep: true })),
+        ];
+        renderImport();
+      } catch (e) {
+        note.textContent = e.code === 'private-pdf' ? t('importPrivate') : e.message;
+      } finally {
+        $('import-open').disabled = $('import-sample').disabled = false;
+      }
+    }
+    function renderImport() {
+      const box = $('import-card');
+      box.hidden = !importList;
+      if (!importList) return;
+      const shortDate = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+      box.innerHTML = `<h2>${t('importTitle')}</h2><p class="hint" style="margin-top:0">${t('importHint')}</p>
+        ${importList.map((x, i) => `<label class="pick"><input type="checkbox" data-i="${i}" ${x.keep ? 'checked' : ''}><span><b>${esc(x.title)}</b><br><span class="hint">${shortDate(x.date)}${x.kind === 'event' ? `, ${x.start} - ${x.end}` : `, ${t('importEstimate')(hrs(x.minutes))}`}</span></span></label>`).join('')}
+        <div class="row" style="margin-top:10px"><label style="font-size:14px">${t('role')} <select id="import-role">${template.roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></label></div>
+        <div class="row" style="margin-top:10px"><button class="primary" id="import-add"></button><button id="import-no">${t('cancel')}</button></div>`;
+      const count = () => { $('import-add').textContent = t('importAdd')(importList.filter((x) => x.keep).length); };
+      box.querySelectorAll('input[type=checkbox]').forEach((c) => { c.onchange = () => { importList[Number(c.dataset.i)].keep = c.checked; count(); }; });
+      count();
+      $('import-no').onclick = () => { importList = null; renderImport(); };
+      $('import-add').onclick = addImported;
+    }
+    // Big work becomes blocks of two hours, all due on the same date.
+    async function addImported() {
+      const roleId = $('import-role').value;
+      const day = { today: state.date };
+      let next = template;
+      const addOne = (name, args) => { const r = runWeekTool(next, name, args, day); if (r.ok) next = r.template; };
+      for (const x of importList.filter((i) => i.keep)) {
+        if (x.kind === 'event') {
+          if (x.date > state.date) addOne('add_event', { title: x.title, start: x.start, minutes: toMin(x.end) - toMin(x.start), date: x.date });
+          continue;
+        }
+        const blocks = Math.ceil(x.minutes / 120);
+        for (let i = 1; i <= blocks; i++) {
+          addOne('add_task', { title: blocks > 1 ? `${x.title} (${i}/${blocks})` : x.title, role: roleId, minutes: Math.max(15, Math.round(x.minutes / blocks)), rank: i === 1 ? '1' : '2', deadline: x.date });
+        }
+      }
+      undoStack.push(snapshot());
+      importList = null;
+      renderImport();
+      apply(await api('/api/edit', { template: next, state, weekday: realDay(), lang }));
+      $('import-status').textContent = t('importDone');
+      showTab('today');
+    }
+    $('import-open').onclick = () => $('doc-file').click();
+    $('doc-file').onchange = () => {
+      const file = $('doc-file').files[0];
+      $('doc-file').value = '';
+      if (file) importDoc(file, file.name);
+    };
+    $('import-sample').onclick = async () => importDoc(await fetch('/sample-syllabus.pdf').then((r) => r.blob()), 'sample-syllabus.pdf');
+
     // Voice check-in: record, convert to 16 kHz mono WAV (what the
     // transcription API accepts), transcribe, then send the text to the agent.
     let recorder = null, micTarget = 'say';
@@ -1191,7 +1292,7 @@
     $('setup-mic').onclick = () => startMic('setup');
     async function startMic(target) {
       if (recorder) { recorder.stop(); return; }
-      if (!askConsent()) return;
+      if (!(await askConsent())) return;
       micTarget = target;
       const btn = target === 'setup' ? $('setup-mic') : $('mic');
       const status = target === 'setup' ? $('setup-status') : $('status');
@@ -1290,11 +1391,28 @@
     // itself; the stream must keep flowing or the server closes it.
     let callNow = null;
     const SILENCE = new Int16Array(2048).buffer;
+    // Words from this plan, so names are heard the way they are written.
+    const planWords = () => [...new Set([...view.roles.map((r) => r.name), ...state.queue.map((q) => q.title), ...(template?.goals || []).map((g) => g.title)])].slice(0, 40);
+    // A short tone: heard you, working on it.
+    function beep() {
+      try {
+        const a = new AudioContext();
+        const o = a.createOscillator();
+        const g = a.createGain();
+        g.gain.value = 0.06;
+        o.frequency.value = 880;
+        o.connect(g).connect(a.destination);
+        o.start();
+        o.stop(a.currentTime + 0.09);
+        o.onended = () => a.close();
+      } catch { /* a missing tone changes nothing */ }
+    }
     const VI_CHARS = /[đăâêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
     function callPhase(p) {
       if (!callNow) return;
       callNow.phase = p;
       $('call-phase').textContent = t(`call_${p}`);
+      $('call-stop').hidden = p !== 'speaking';
     }
     function speakOut(text) {
       return new Promise((resolve) => {
@@ -1314,8 +1432,10 @@
     function spokenAnswer(done) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
       const p = done.proposal;
-      const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${t('guardian')[o.by] ? `, ${t('guardian')[o.by]}` : ''}: ${o.ids.map(title).join(', ')}.${o.why ? ` ${o.why}` : ''}`).join(' ') : '';
-      return `${done.reply || p?.message || ''} ${options}`.trim();
+      // Spoken: the reason, not seven task names. The names are on the screen.
+      const name = (o) => (t('guardian')[o.by] || '').replace(/^\S+\s/, '');
+      const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${name(o) ? `, ${name(o)}` : ''}: ${o.why || o.ids.map(title).slice(0, 3).join(', ')}.`).join(' ') : '';
+      return `${done.reply || p?.message || ''} ${options}${p ? ` ${t('whichOne')}` : ''}`.trim();
     }
     async function callTurn(text) {
       callPhase('thinking');
@@ -1327,28 +1447,33 @@
       $('call-reply').textContent = line;
       callPhase('speaking');
       await speakOut(line);
+      if (callNow) callNow.heard = Date.now();
       callPhase('listening');
     }
     async function startCall() {
-      if (callNow || !askConsent()) return;
+      if (callNow) return;
       // Browsers only allow speech that starts from a tap, so it starts here.
       window.speechSynthesis?.getVoices();
       window.speechSynthesis?.speak(new SpeechSynthesisUtterance(''));
+      if (!(await askConsent())) return;
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch { $('status').textContent = t('noMic'); return; }
       showTab('today');
+      $('call').hidden = true;
       const ws = new WebSocket(voiceUrl('&call=1'));
       ws.binaryType = 'arraybuffer';
-      callNow = { ws, stream, phase: 'speaking', stopMic: null };
+      callNow = { ws, stream, phase: 'speaking', stopMic: null, heard: Date.now(), lock: null };
+      navigator.wakeLock?.request('screen').then((l) => { if (callNow) callNow.lock = l; else l.release(); }).catch(() => {});
+      ws.onopen = () => ws.send(JSON.stringify({ keywords: planWords() }));
       $('call-box').hidden = false;
       $('call-live').textContent = ''; $('call-reply').textContent = ''; $('call-note').textContent = '';
       callPhase('speaking');
       ws.onmessage = ({ data }) => {
         const m = JSON.parse(data);
         if (!callNow || callNow.phase !== 'listening') return;
-        if (m.type === 'transcript' && m.text) $('call-live').textContent = m.text;
-        if (m.type === 'turn' && m.text.trim()) callTurn(m.text.trim());
+        if (m.type === 'transcript' && m.text) { $('call-live').textContent = m.text; callNow.heard = Date.now(); }
+        if (m.type === 'turn' && m.text.trim()) { beep(); callTurn(m.text.trim()); }
       };
       ws.onclose = () => endCall();
       ws.onerror = () => { $('status').textContent = t('errNet'); };
@@ -1357,11 +1482,18 @@
       });
       await speakOut(t('callHello'));
       callPhase('listening');
+      // A forgotten call must not keep the microphone open.
+      callNow.idle = setInterval(() => {
+        if (callNow?.phase === 'listening' && Date.now() - callNow.heard > 90000) endCall();
+      }, 5000);
     }
     function endCall() {
       if (!callNow) return;
-      const { ws, stream, stopMic } = callNow;
+      const { ws, stream, stopMic, lock, idle } = callNow;
       callNow = null;
+      clearInterval(idle);
+      lock?.release().catch(() => {});
+      $('call').hidden = false;
       stopMic?.();
       stream.getTracks().forEach((tr) => tr.stop());
       try { ws.close(); } catch {}
@@ -1370,6 +1502,7 @@
     }
     $('call').onclick = startCall;
     $('call-end').onclick = endCall;
+    $('call-stop').onclick = () => window.speechSynthesis?.cancel();
 
     async function toWav(blob) {
       const ctx = new AudioContext({ sampleRate: 16000 });
@@ -1415,11 +1548,21 @@
     $('private').onchange = () => { store.set('meso-private', $('private').checked ? '1' : ''); syncPrivate(); };
     syncPrivate();
 
+    // Asked once, before the first thing leaves for an AI provider.
+    // Earlier turns of the conversation; the latest answer sits below them.
+    function renderThread() {
+      $('thread').innerHTML = chatLog.slice(0, -2).slice(-6).map((m) => `<div class="turn ${m.role === 'user' ? 'me' : 'ai'}">${esc(m.content)}</div>`).join('');
+    }
+
     function askConsent() {
-      if (consented()) return true;
-      if (!confirm(`${t('consentText')} ${t('consentLink')}${t('consentTail')}`)) return false;
-      giveConsent();
-      return true;
+      if (consented()) return Promise.resolve(true);
+      const box = $('consent-sheet');
+      box.showModal();
+      return new Promise((done) => {
+        const finish = (ok) => { box.close(); if (ok) giveConsent(); done(ok); };
+        $('consent-yes').onclick = () => finish(true);
+        $('consent-no').onclick = () => finish(false);
+      });
     }
 
     // Memory of the conversation, and a proposal still waiting for an answer.
@@ -1428,7 +1571,7 @@
       const text = (textArg ?? $('say').value).trim();
       if (!text) return null;
       if (!navigator.onLine) { $('status').textContent = t('offlineAi'); return null; }
-      if (!opts.demo && !askConsent()) return null;
+      if (!opts.demo && !(await askConsent())) return null;
       $('send').disabled = true;
       $('status').textContent = image ? t('readingPhoto') : t('thinking');
       $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
@@ -1467,6 +1610,7 @@
         done.receipt = receiptHtml(before, beforeWeek, done);
         count('replan');
         chatLog.push({ role: 'user', content: text }, { role: 'assistant', content: done.reply });
+        renderThread();
         pendingProposal = done.proposal || null;
         $('say').value = '';
         showAnswer(done);
