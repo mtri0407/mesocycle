@@ -7,27 +7,31 @@
   <style>
     :root {
       --bg: #f5f6f8; --fg: #15181d; --muted: #5d6573; --card: #fff; --line: #e3e6eb;
-      --accent: #2457d6; --accent-fg: #fff; --ok: #1a7f4b; --warn: #a15c00; --bad: #b42318; --chip: #eef1f6;
+      --accent: #2457d6; --accent-fg: #fff; --ok: #1a7f4b; --warn: #a15c00; --bad: #b42318; --chip: #eef1f6; --tip: #f0f5ff;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
         --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --line: #2a2f38;
-        --accent: #6f95ff; --accent-fg: #0f1115; --ok: #4cc38a; --warn: #e3a24a; --bad: #f97066; --chip: #232832;
+        --accent: #6f95ff; --accent-fg: #0f1115; --ok: #4cc38a; --warn: #e3a24a; --bad: #f97066; --chip: #232832; --tip: #1a2233;
       }
     }
     * { box-sizing: border-box; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
     main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
-    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     h1 { margin: 0; font-size: 22px; }
     h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
     .muted { color: var(--muted); }
+    .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .intro { background: var(--tip); }
+    .intro ul { margin: 6px 0 12px; padding-left: 18px; }
     .now-title { font-size: 22px; font-weight: 650; margin: 2px 0 4px; }
     .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     button { font: inherit; font-size: 15px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
     button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    button.small { font-size: 13px; padding: 5px 10px; }
     button:disabled { opacity: .5; cursor: default; }
     .next { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
     .next:first-of-type { border-top: 0; }
@@ -35,13 +39,14 @@
     .reply { white-space: pre-wrap; margin: 12px 0 0; }
     .option { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
     .option ul { margin: 6px 0 8px; padding-left: 18px; }
-    .steps { font: 13px/1.5 ui-monospace, Consolas, monospace; margin: 6px 0 0; padding-left: 18px; }
+    .steps { font: 13px/1.6 ui-monospace, Consolas, monospace; margin: 8px 0 0; padding-left: 18px; }
     .ok { color: var(--ok); } .no { color: var(--bad); }
     .bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 3px; }
     .bar i { display: block; height: 100%; background: var(--accent); }
     .bar.under i { background: var(--warn); }
     .floor { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 14px; margin-bottom: 8px; }
     .warn { color: var(--warn); }
+    .caption { border-left: 3px solid var(--accent); padding: 6px 10px; margin: 10px 0 0; background: var(--tip); border-radius: 0 8px 8px 0; font-size: 14px; }
     details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
     input[type=time], select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
   </style>
@@ -50,48 +55,160 @@
   <main>
     <header>
       <h1>Mesocycle</h1>
-      <span class="muted" id="date"></span>
+      <div class="row">
+        <span class="muted" id="date"></span>
+        <button class="small" id="lang" title="Tiếng Việt / English"></button>
+      </div>
     </header>
 
+    <section class="card intro" id="intro"></section>
     <section class="card" id="now-card"></section>
     <section class="card" id="next-card"></section>
 
     <section class="card">
-      <h2>What changed?</h2>
-      <textarea id="say" placeholder="e.g. I slept through the afternoon, and there's a class meeting at 7pm for an hour"></textarea>
+      <h2 data-t="changed"></h2>
+      <textarea id="say"></textarea>
       <div class="row" style="margin-top:8px">
-        <button class="primary" id="send">Re-plan</button>
-        <button id="mic" title="Voice check-in (Muse Voice Transcribe)">🎙 Speak</button>
-        <button id="photo" title="Add today's classes or tasks from a photo (Muse Spark)">📷 Photo</button>
-        <input type="file" id="photo-file" accept="image/*" capture="environment" hidden>
+        <button class="primary" id="send" data-t="replan"></button>
+        <button id="mic"></button>
+        <button id="photo" data-t="photo"></button>
+        <input type="file" id="photo-file" accept="image/*" hidden>
         <select id="provider" title="Model">
           <option value="meta">Muse Spark</option>
           <option value="open">Muse Spark Open</option>
         </select>
-        <span class="muted" id="status"></span>
       </div>
+      <p class="hint" data-t="changedHint"></p>
+      <div id="status" class="hint"></div>
+      <ol class="steps" id="live-steps"></ol>
       <div id="answer"></div>
     </section>
 
     <section class="card" id="week-card"></section>
 
     <details class="card">
-      <summary>Demo controls</summary>
-      <div class="row" style="margin-top:10px">
-        <label>Clock <input type="time" id="clock" step="300"></label>
-        <button id="reset">Reset demo day</button>
+      <summary data-t="feedback"></summary>
+      <p class="hint" data-t="feedbackHint"></p>
+      <textarea id="fb-text" style="margin-top:8px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="fb-send" data-t="send"></button>
+        <span class="hint" id="fb-status"></span>
       </div>
+    </details>
+
+    <details class="card">
+      <summary data-t="demoControls"></summary>
+      <div class="row" style="margin-top:10px">
+        <label><span data-t="clock"></span> <input type="time" id="clock" step="300"></label>
+        <button id="reset" data-t="reset"></button>
+      </div>
+      <p class="hint" data-t="clockHint"></p>
     </details>
   </main>
 
   <script>
+    const T = {
+      en: {
+        intro: `<h2>What is this?</h2>
+          <p style="margin:0">A planner that re-plans your day when life breaks the plan. This demo is the author's real Friday before midterms.</p>
+          <ul>
+            <li><b>Now</b> shows one thing to do. Tap Done, Need more time, or Can't do it, and the rest of the day slides.</li>
+            <li>When something changes, <b>say it or type it</b>. The AI agent re-plans and asks before cutting anything.</li>
+            <li>Sleep and your weekly minimum for family, training and work are protected.</li>
+          </ul>`,
+        tryDemo: '▶ Try the demo: a broken afternoon', hideIntro: 'Hide',
+        now: 'Now', next: 'Next', nothingLeft: 'Nothing left that fits today.',
+        debtNote: 'Unfinished work is kept as debt and comes back when there is real free time.',
+        done: 'Done', more: 'Need 15 more min', skip: "Can't do it",
+        nowHint: 'The rest of the day slides automatically. Only classes, meetings and sleep have fixed times.',
+        nothingElse: 'Nothing else today.', fixed: 'Fixed', doesNotFit: "Doesn't fit today",
+        doesNotFitTail: 'Tell Mesocycle what changed and it will re-plan.',
+        changed: 'What changed?', replan: 'Re-plan', speak: '🎙 Speak', stop: '⏹ Stop', photo: '📷 Photo',
+        placeholder: "e.g. I slept through the afternoon, and there's a class meeting at 7pm for an hour",
+        changedHint: 'Speak or type in English or Vietnamese. 📷 adds classes or tasks from a photo of a schedule.',
+        listening: 'Listening... tap Stop when you finish.', transcribing: 'Turning your voice into text (Muse Voice Transcribe)...',
+        thinking: 'The agent is reading your plan...', readingPhoto: 'Reading the photo (Muse Spark)...',
+        noMic: 'Microphone not allowed', notCaught: 'Did not catch that, try again',
+        suggested: 'Suggested', or: 'Or', moveToDebt: 'move to debt', approve: 'Approve',
+        approved: 'Done. Moved to debt; it comes back when there is real free time.',
+        steps: 'Agent steps', stepsHint: '✗ means the code refused a step that broke a rule; the agent read why and fixed it.',
+        week: 'This week', of: 'of', floor: 'floor', debt: 'debt', onTrack: 'on track', short: 'short',
+        pace: (p, role) => `You usually take ${p}% longer on ${role}. New estimates include that.`,
+        feedback: 'Tried it? Send feedback', feedbackHint: 'What confused you, what helped, what is missing. The author reads every note.',
+        send: 'Send', thanks: 'Thank you!',
+        demoControls: 'Demo controls', clock: 'Clock', reset: 'Reset demo day',
+        clockHint: 'The demo clock replaces real time so you can jump to any moment of the day.',
+        tool: { get_state: 'read the plan', add_fixed: 'add a fixed event', update_item: 'update an item', add_item: 'add work', reorder: 'reorder the queue', propose: 'propose a cut' },
+        demoText: "I slept through the afternoon, and there's a class meeting at 7pm for an hour",
+        cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
+        cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
+        cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
+        date: 'Fri 30 Oct',
+      },
+      vi: {
+        intro: `<h2>Đây là gì?</h2>
+          <p style="margin:0">Trợ lý xếp lại lịch khi kế hoạch bị vỡ. Bản demo là ngày thứ Sáu thật của tác giả trước kỳ thi giữa kỳ.</p>
+          <ul>
+            <li><b>Bây giờ</b> chỉ hiện một việc cần làm. Bấm Xong, Cần thêm giờ, hoặc Không làm được, phần còn lại tự trượt.</li>
+            <li>Có gì thay đổi thì <b>nói hoặc gõ</b>. Agent AI xếp lại, và luôn hỏi trước khi cắt việc.</li>
+            <li>Giờ ngủ và mức tối thiểu mỗi tuần cho gia đình, tập luyện, công việc luôn được giữ.</li>
+          </ul>`,
+        tryDemo: '▶ Thử demo: một buổi chiều bị vỡ', hideIntro: 'Ẩn',
+        now: 'Bây giờ', next: 'Tiếp theo', nothingLeft: 'Hôm nay không còn việc nào vừa.',
+        debtNote: 'Việc chưa làm được giữ lại thành nợ, quay lại khi có giờ trống thật.',
+        done: 'Xong', more: 'Cần thêm 15 phút', skip: 'Không làm được',
+        nowHint: 'Phần còn lại tự trượt. Chỉ lớp học, lịch họp và giờ ngủ có giờ cố định.',
+        nothingElse: 'Hôm nay không còn gì khác.', fixed: 'Cố định', doesNotFit: 'Không vừa hôm nay',
+        doesNotFitTail: 'Nói cho Mesocycle biết điều gì thay đổi để nó xếp lại.',
+        changed: 'Có gì thay đổi?', replan: 'Xếp lại', speak: '🎙 Nói', stop: '⏹ Dừng', photo: '📷 Ảnh',
+        placeholder: 'Ví dụ: chiều nay tôi ngủ quên, 7 giờ tối có họp ban cán sự 1 tiếng',
+        changedHint: 'Nói hoặc gõ tiếng Việt hay tiếng Anh. 📷 thêm lớp học hoặc việc từ ảnh lịch.',
+        listening: 'Đang nghe... nói xong bấm Dừng.', transcribing: 'Đang chuyển giọng nói thành chữ (Muse Voice Transcribe)...',
+        thinking: 'Agent đang đọc kế hoạch của bạn...', readingPhoto: 'Đang đọc ảnh (Muse Spark)...',
+        noMic: 'Chưa cho phép micro', notCaught: 'Chưa nghe rõ, thử lại nhé',
+        suggested: 'Đề xuất', or: 'Hoặc', moveToDebt: 'chuyển thành nợ', approve: 'Đồng ý',
+        approved: 'Xong. Đã chuyển thành nợ, sẽ quay lại khi có giờ trống thật.',
+        steps: 'Các bước của agent', stepsHint: '✗ nghĩa là code đã từ chối một bước phạm luật; agent đọc lý do và tự sửa.',
+        week: 'Tuần này', of: 'trên', floor: 'tối thiểu', debt: 'nợ', onTrack: 'kịp', short: 'thiếu',
+        pace: (p, role) => `Bạn thường làm ${role} lâu hơn ${p}%. Ước lượng mới đã tính thêm.`,
+        feedback: 'Dùng thử rồi? Gửi góp ý', feedbackHint: 'Chỗ nào khó hiểu, chỗ nào có ích, còn thiếu gì. Tác giả đọc từng góp ý.',
+        send: 'Gửi', thanks: 'Cảm ơn bạn!',
+        demoControls: 'Điều khiển demo', clock: 'Đồng hồ', reset: 'Làm lại ngày demo',
+        clockHint: 'Đồng hồ demo thay cho giờ thật để bạn nhảy tới bất kỳ lúc nào trong ngày.',
+        tool: { get_state: 'đọc kế hoạch', add_fixed: 'thêm lịch cố định', update_item: 'cập nhật việc', add_item: 'thêm việc', reorder: 'sắp lại thứ tự', propose: 'đề xuất cắt' },
+        demoText: 'Chiều nay tôi ngủ quên, 7 giờ tối có họp ban cán sự 1 tiếng',
+        cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
+        cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
+        cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
+        date: 'Thứ Sáu 30/10',
+      },
+    };
+
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    let state = null, view = null;
+    const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
-    function save() { try { localStorage.setItem('meso-state', JSON.stringify(state)); } catch {} }
-    function load() { try { return JSON.parse(localStorage.getItem('meso-state')); } catch { return null; } }
+    let lang = store.get('meso-lang') || (navigator.language.startsWith('vi') ? 'vi' : 'en');
+    let state = null, view = null;
+    const t = (k) => T[lang][k];
+
+    function applyLang() {
+      document.documentElement.lang = lang;
+      $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
+      document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
+      $('say').placeholder = t('placeholder');
+      $('mic').textContent = recorder ? t('stop') : t('speak');
+      renderIntro();
+      if (view) render();
+    }
+
+    function renderIntro() {
+      if (store.get('meso-intro') === 'hidden') { $('intro').hidden = true; return; }
+      $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
+      $('try').onclick = tryDemo;
+      $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
+    }
 
     async function api(path, body) {
       const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -101,14 +218,14 @@
     }
 
     function apply(data) {
-      if (data.state) { state = data.state; save(); }
+      if (data.state) { state = data.state; store.set('meso-state', JSON.stringify(state)); }
       if (data.view) view = data.view;
       render();
     }
 
     async function resetDay(time = '07:00') {
-      apply(await api(`/api/demo?now=${time}`));
-      $('answer').innerHTML = '';
+      apply(await api(`/api/demo?now=${time}&lang=${lang}`));
+      $('answer').innerHTML = ''; $('live-steps').innerHTML = ''; $('status').textContent = '';
     }
 
     async function refresh() { apply(await api('/api/tool', { state, name: 'get_state' })); }
@@ -116,43 +233,55 @@
     const roleName = (id) => (view.roles.find((r) => r.id === id) || {}).name || id;
     const span = (q) => toMin(q.end) - toMin(q.start);
 
+    // Learned pace: median of real/estimated time per role, shown once there are 3 samples.
+    function paceLine(roleId) {
+      const r = (state.actuals || []).filter((a) => a.roleId === roleId).map((a) => a.actual / a.est).sort((a, b) => a - b);
+      if (r.length < 3) return '';
+      const mid = Math.floor(r.length / 2);
+      const p = Math.round(((r.length % 2 ? r[mid] : (r[mid - 1] + r[mid]) / 2) - 1) * 100);
+      return p >= 10 ? `<p class="hint">⏱ ${esc(t('pace')(p, roleName(roleId)))}</p>` : '';
+    }
+
     function render() {
-      $('date').textContent = `Fri 30 Oct, ${view.now}`;
+      $('date').textContent = `${t('date')}, ${view.now}`;
       $('clock').value = view.now;
       const [now, ...next] = view.queue;
 
       $('now-card').innerHTML = now ? `
-        <h2>Now</h2>
+        <h2>${t('now')}</h2>
         <div class="now-title">${esc(now.title)}</div>
         <div class="row muted" style="margin-bottom:12px">
-          <span>${now.start} to ${now.end}</span><span class="chip">${esc(roleName(now.role))}</span>
+          <span>${now.start} - ${now.end}</span><span class="chip">${esc(roleName(now.role))}</span>
         </div>
         <div class="row">
-          <button class="primary" data-act="done">Done</button>
-          <button data-act="more">Need 15 more min</button>
-          <button data-act="skip">Can't do it</button>
-        </div>` : `<h2>Now</h2><div class="now-title">Nothing left that fits today.</div>
-        <p class="muted" style="margin:0">Unfinished work is kept as debt and comes back when there is real free time.</p>`;
+          <button class="primary" data-act="done">${t('done')}</button>
+          <button data-act="more">${t('more')}</button>
+          <button data-act="skip">${t('skip')}</button>
+        </div>
+        <p class="hint">${t('nowHint')}</p>${paceLine(now.role)}` : `<h2>${t('now')}</h2><div class="now-title">${t('nothingLeft')}</div>
+        <p class="hint">${t('debtNote')}</p>`;
       if (now) $('now-card').querySelectorAll('button').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
 
-      const misfit = view.doesNotFit.length ? `<p class="warn" style="margin:10px 0 0">Doesn't fit today: ${view.doesNotFit.map((x) => esc(x.title)).join(', ')}. Tell Mesocycle what changed and it will re-plan.</p>` : '';
-      $('next-card').innerHTML = `<h2>Next</h2>${next.slice(0, 3).map((n) => `
-        <div class="next"><span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || '<p class="muted" style="margin:0">Nothing else today.</p>'}
-        ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">Fixed: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
+      const misfit = view.doesNotFit.length ? `<p class="warn" style="margin:10px 0 0">${t('doesNotFit')}: ${view.doesNotFit.map((x) => esc(x.title)).join(', ')}. ${t('doesNotFitTail')}</p>` : '';
+      $('next-card').innerHTML = `<h2>${t('next')}</h2>${next.slice(0, 3).map((n) => `
+        <div class="next"><span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || `<p class="muted" style="margin:0">${t('nothingElse')}</p>`}
+        ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">${t('fixed')}: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
 
       const debt = view.debtMinutes;
-      $('week-card').innerHTML = `<h2>This week</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
+      $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
         const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
         const pct = Math.min(100, Math.round(have / r.floorMin * 100));
-        return `<div class="floor"><span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h of ${r.floorMin / 60}h floor${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h debt` : ''}</span>
+        return `<div class="floor"><span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h ${t('of')} ${r.floorMin / 60}h ${t('floor')}${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h ${t('debt')}` : ''}</span>
           <div class="bar ${have < r.floorMin ? 'under' : ''}" style="grid-column:1/3"><i style="width:${pct}%"></i></div></div>`;
-      }).join('') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? 'on track' : `${Math.round(d.shortMin / 60)}h short`}</p>`).join('');
+      }).join('') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${Math.round(d.shortMin / 60)}h`}</p>`).join('');
     }
 
     async function act(kind, item) {
       let args;
       if (kind === 'done') {
-        args = { id: item.id, status: 'done', minutes: span(item) };
+        // Real minutes spent: from the item's start to the clock, if the clock moved on.
+        const spent = state.now > toMin(item.start) ? state.now - toMin(item.start) : span(item);
+        args = { id: item.id, status: 'done', minutes: spent };
         state.now = Math.max(state.now, toMin(item.end));
       } else if (kind === 'more') {
         args = { id: item.id, status: 'more_time', minutes: 15 };
@@ -169,27 +298,27 @@
       if (recorder) { recorder.stop(); return; }
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-      catch { $('status').textContent = 'Microphone not allowed'; return; }
+      catch { $('status').textContent = t('noMic'); return; }
       const chunks = [];
       recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunks.push(e.data);
       recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((tr) => tr.stop());
         recorder = null;
-        $('mic').textContent = '🎙 Speak';
-        $('status').textContent = 'Transcribing...';
+        $('mic').textContent = t('speak');
+        $('status').textContent = t('transcribing');
         try {
           const wav = await toWav(new Blob(chunks));
           const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error);
           $('say').value = data.text;
-          if (data.text) send(); else $('status').textContent = 'Did not catch that, try again';
+          if (data.text) send(); else $('status').textContent = t('notCaught');
         } catch (e) { $('status').textContent = e.message; }
       };
       recorder.start();
-      $('mic').textContent = '⏹ Stop';
-      $('status').textContent = 'Listening...';
+      $('mic').textContent = t('stop');
+      $('status').textContent = t('listening');
     };
 
     async function toWav(blob) {
@@ -219,23 +348,43 @@
       const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       const image = canvas.toDataURL('image/jpeg', 0.85);
-      send($('say').value.trim() || 'Add what is in this photo to today.', image);
+      send($('say').value.trim() || (lang === 'vi' ? 'Thêm những gì trong ảnh vào hôm nay.' : 'Add what is in this photo to today.'), image);
     };
 
     $('send').onclick = () => send();
 
+    // Agent call, streamed: each tool step appears as soon as it happens.
     async function send(textArg, image = null) {
       const text = (textArg ?? $('say').value).trim();
       if (!text) return;
       $('send').disabled = true;
-      $('status').textContent = image ? 'Reading the photo...' : 'Thinking...';
-      $('answer').innerHTML = '';
+      $('status').textContent = image ? t('readingPhoto') : t('thinking');
+      $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
+      const started = Date.now();
       try {
-        const data = await api('/api/agent', { state, text, image, provider: $('provider').value });
-        apply(data);
+        const res = await fetch('/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true }) });
+        if (!res.body) throw new Error('No response');
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '', done = null;
+        for (;;) {
+          const { value, done: end } = await reader.read();
+          if (end) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i + 1);
+            if (!line.trim()) continue;
+            const msg = JSON.parse(line);
+            if (msg.type === 'step') $('live-steps').insertAdjacentHTML('beforeend', stepHtml(msg));
+            if (msg.type === 'done') done = msg;
+          }
+        }
+        if (!done || !done.ok) throw new Error(done?.error || 'No answer');
+        apply(done);
         $('say').value = '';
-        showAnswer(data);
-        $('status').textContent = `${(data.modelMs / 1000).toFixed(1)}s`;
+        showAnswer(done);
+        $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s`;
       } catch (e) {
         $('status').textContent = e.message;
       } finally {
@@ -243,28 +392,57 @@
       }
     }
 
+    const stepHtml = (s) => `<li><span class="${s.ok ? 'ok' : 'no'}">${s.ok ? '✓' : '✗'}</span> ${esc(t('tool')[s.tool] || s.tool)}${s.error ? `: <span class="no">${esc(s.error)}</span>` : ''}</li>`;
+
     function showAnswer(data) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
       const p = data.proposal;
+      $('live-steps').innerHTML = '';
       $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>` +
-        (p ? p.options.map((ids, i) => `<div class="option"><strong>${i === 0 ? 'Suggested' : 'Or'}</strong>: move to debt
+        (p ? p.options.map((ids, i) => `<div class="option"><strong>${i === 0 ? t('suggested') : t('or')}</strong>: ${t('moveToDebt')}
           <ul>${ids.map((id) => `<li>${esc(title(id))}</li>`).join('')}</ul>
-          <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">Approve</button></div>`).join('') : '') +
-        `<details style="margin-top:12px"><summary>Agent steps (${data.trace.length})</summary><ol class="steps">${data.trace.map((t) =>
-          `<li><span class="${t.ok ? 'ok' : 'no'}">${t.ok ? '✓' : '✗'}</span> ${esc(t.tool)}${t.error ? `: <span class="no">${esc(t.error)}</span>` : ''}</li>`).join('')}</ol></details>`;
+          <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
+        `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
+          <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
       if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
         b.onclick = async () => {
           apply(await api('/api/approve', { state, ids: p.options[Number(b.dataset.opt)] }));
-          $('answer').innerHTML = '<p class="reply muted">Done. Moved to debt; it comes back when there is real free time.</p>';
+          $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p>`;
         };
       });
     }
 
+    // Guided demo: a broken afternoon, with a caption for each step.
+    async function tryDemo() {
+      const cap = (k) => $('captions').insertAdjacentHTML('beforeend', `<p class="caption">${t(k)}</p>`);
+      $('captions').innerHTML = '';
+      await resetDay('17:00');
+      cap('cap1');
+      $('say').value = t('demoText');
+      cap('cap2');
+      $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      await send();
+      cap('cap3');
+    }
+
+    $('lang').onclick = async () => {
+      lang = lang === 'vi' ? 'en' : 'vi';
+      store.set('meso-lang', lang);
+      applyLang();
+      await resetDay(view ? view.now : '07:00');
+    };
     $('reset').onclick = () => resetDay($('clock').value || '07:00');
     $('clock').onchange = async () => { state.now = toMin($('clock').value); await refresh(); };
+    $('fb-send').onclick = async () => {
+      const text = $('fb-text').value.trim();
+      if (!text) return;
+      try { await api('/api/feedback', { text, lang }); $('fb-text').value = ''; $('fb-status').textContent = t('thanks'); }
+      catch (e) { $('fb-status').textContent = e.message; }
+    };
 
     (async () => {
-      state = load();
+      applyLang();
+      try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
       if (state) await refresh(); else await resetDay();
     })();
   </script>

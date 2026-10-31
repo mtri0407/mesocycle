@@ -18,7 +18,7 @@ function json(data, status = 200) {
 const view = (state) => runTool(state, 'get_state', {}).result;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
       // Voice check-in: the browser sends a WAV clip, we return the text.
@@ -46,7 +46,7 @@ export default {
       // Fresh demo day. ?now=HH:MM sets the clock for demos.
       if (url.pathname === '/api/demo') {
         const [h, m] = (url.searchParams.get('now') || '07:00').split(':').map(Number);
-        const state = demoState(h * 60 + m);
+        const state = demoState(h * 60 + m, url.searchParams.get('lang') === 'vi' ? 'vi' : 'en');
         return json({ ok: true, state, view: view(state) });
       }
 
@@ -73,8 +73,34 @@ export default {
           modelMs += out.ms;
           return out;
         };
-        const out = await runAgent({ state: body.state, userText: String(body.text || ''), chatFn, image: body.image || null });
-        return json({ ok: true, ...out, modelMs, view: view(out.state) });
+        const args = { state: body.state, userText: String(body.text || ''), chatFn, image: body.image || null };
+        if (!body.stream) {
+          const out = await runAgent(args);
+          return json({ ok: true, ...out, modelMs, view: view(out.state) });
+        }
+        // Streamed: one JSON line per tool call as it happens, then the result.
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const send = (obj) => writer.write(new TextEncoder().encode(JSON.stringify(obj) + '\n'));
+        ctx.waitUntil((async () => {
+          try {
+            const out = await runAgent({ ...args, onStep: (step) => send({ type: 'step', ...step }) });
+            await send({ type: 'done', ok: true, ...out, modelMs, view: view(out.state) });
+          } catch (err) {
+            await send({ type: 'done', ok: false, error: String(err.message || err) });
+          }
+          await writer.close();
+        })());
+        return new Response(readable, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } });
+      }
+
+      // Feedback from testers: short text, stored in KV, never shown publicly.
+      if (url.pathname === '/api/feedback' && body) {
+        const text = String(body.text || '').trim().slice(0, 2000);
+        if (!text) return json({ ok: false, error: 'Empty feedback' }, 400);
+        const key = `${new Date().toISOString()}-${crypto.randomUUID().slice(0, 8)}`;
+        await env.FEEDBACK.put(key, JSON.stringify({ text, lang: body.lang || '', rating: body.rating ?? null }));
+        return json({ ok: true });
       }
 
       return json({ ok: false, error: 'Not found' }, 404);

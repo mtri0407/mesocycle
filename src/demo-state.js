@@ -1,6 +1,32 @@
 // A real day from the author's midterm week (Friday, 30 Oct 2026), used for
 // the demo. Course names are real; nothing private beyond that.
-export function demoState(nowMin = 7 * 60) {
+const VI = {
+  roles: { gpa: 'Đại học (GPA)', company: 'Greysteel Education', health: 'Tập luyện', project: 'Dự án hackathon', clubs: 'CLB', people: 'Gia đình và bạn bè' },
+  queue: {
+    'q-1': 'Giải tích block 1: đạo hàm phần 2',
+    'q-2': 'Giải tích block 2: đạo hàm phần 3',
+    'q-3': 'Gym',
+    'q-4': 'Đại số block 3: ma trận và định thức',
+    'q-5': 'Greysteel: trả lời khách, kiểm tra học phí',
+    'q-6': 'Làm lại đề Đại số năm trước (40 phút) và chấm',
+    'q-7': 'Pháp luật: 30 phút đọc slide',
+    'q-8': 'Làm hackathon',
+    'q-9': 'Gọi về nhà',
+  },
+  deadline: 'Thi giữa kỳ Giải tích + Đại số (8/11)',
+};
+
+// lang 'vi' gives the same day with Vietnamese titles.
+export function demoState(nowMin = 7 * 60, lang = 'en') {
+  const s = baseDay(nowMin);
+  if (lang !== 'vi') return s;
+  for (const r of s.roles) r.name = VI.roles[r.id];
+  for (const q of s.queue) q.title = VI.queue[q.id];
+  s.deadlines[0].title = VI.deadline;
+  return s;
+}
+
+function baseDay(nowMin) {
   return {
     date: '2026-10-30',
     now: nowMin,

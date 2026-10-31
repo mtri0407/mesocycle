@@ -94,6 +94,7 @@ function summary(state) {
     }),
     doesNotFit: plan.cuts.map((id) => ({ id, title: title(id) })),
     needsUser: plan.needsUser,
+    cutOptions: plan.needsUser ? cutOptions(state, plan) : [],
     budgetMin: plan.budgetMin,
     usedMin: plan.usedMin,
     floorAtRisk: plan.floorBreaches,
@@ -101,6 +102,37 @@ function summary(state) {
     roles: state.roles.map((r) => ({ id: r.id, name: r.name, priority: r.priority, floorMin: r.floorMin || 0, weekSoFarMin: (state.week[r.id]?.done) || 0 })),
     deadlines: (state.deadlines || []).map((d) => ({ title: d.title, date: d.date, ...deadlineRisk({ needMin: d.remainingMin, days: d.days, fillRatio: { ...DEFAULT_SETTINGS, ...state.settings }.fillRatio }) })),
   };
+}
+
+// Valid cut proposals worked out by code, so the model can choose and
+// explain instead of guessing and getting rejected (each rejection costs a
+// model round trip). Option 1 is the planner's own cut. Option 2 is a swap:
+// keep the most important cut item and drop the least important kept work.
+const RANK = { 1: 1, 2: 2, 3: 3, extra: 4 };
+function cutOptions(state, plan) {
+  const item = (id) => state.queue.find((i) => i.id === id);
+  const prio = (it) => state.roles.find((r) => r.id === it.roleId)?.priority ?? 99;
+  // Negative when a is more important than b.
+  const cmp = (a, b) => RANK[a.rank] - RANK[b.rank] || prio(a) - prio(b);
+  const valid = (ids) => ids.length && !replan(applyEvent(state, { type: 'cut', ids })).needsUser && !floorBroken(state, ids).length;
+  const options = valid(plan.cuts) ? [plan.cuts] : [];
+
+  const save = plan.cuts.map(item).sort(cmp)[0];
+  if (save) {
+    const rest = plan.cuts.filter((id) => id !== save.id);
+    // Kept work, least important first; Block 1 items are never swapped out.
+    const kept = plan.placed.map((p) => item(p.id)).filter((it) => it.rank !== 1).sort((a, b) => cmp(b, a));
+    const dropped = [];
+    for (const it of kept) {
+      dropped.push(it.id);
+      const alt = [...rest, ...dropped];
+      if (valid(alt)) {
+        if (alt.slice().sort().join() !== plan.cuts.slice().sort().join()) options.push(alt);
+        break;
+      }
+    }
+  }
+  return options.map((ids) => ids.map((id) => ({ id, title: item(id).title })));
 }
 
 // Would cutting these items push a role under its floor?

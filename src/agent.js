@@ -17,8 +17,9 @@ How you work:
 - Missed work becomes debt; never push it into a specific future slot.
 - A photo (timetable, syllabus, to-do list): add only what happens TODAY.
   Classes and meetings with a time are add_fixed; tasks are add_item.
-- When proposing cuts, check budgetMin and usedMin in the plan so the
-  first proposal already fits.
+- When the plan has cutOptions, propose with them: option 1 as cut_ids,
+  option 2 (if any) as alternative_cut_ids. They are already checked;
+  do not invent your own cut list.
 
 Style: reply in the user's language. Short, calm, no blame, no guilt
 words. At most 3 sentences plus the proposal. Never use em dashes or
@@ -29,7 +30,8 @@ training advice. If the user mentions feeling sick or stressed, only ask
 how much time they have today.`;
 
 // House style: no em or en dashes in anything the user reads.
-const noDashes = (s) => s.replace(/\s*[–—]\s*/g, ', ');
+const DASHES = new RegExp('\\s*[' + String.fromCharCode(0x2013, 0x2014) + ']\\s*', 'g');
+const noDashes = (s) => s.replace(DASHES, ', ');
 
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries
@@ -37,7 +39,8 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // chatFn(messages, tools) -> { text, toolCalls, message }. Injected so tests
 // can use a scripted fake model and never spend credits.
 // image: optional data URL (a timetable, a syllabus, a to-do list photo).
-export async function runAgent({ state, userText, chatFn, history = [], image = null }) {
+// onStep(step) is called after every tool call so the UI can show progress live.
+export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {} }) {
   // Sending the plan up front saves one model round trip (a get_state call).
   const plan = runTool(state, 'get_state', {}).result;
   const content = `${userText}
@@ -59,7 +62,9 @@ ${JSON.stringify(plan)}`;
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
     for (const call of out.toolCalls) {
       const res = runTool(state, call.name, call.args);
-      trace.push({ tool: call.name, args: call.args ?? call.rawArgs, ok: res.ok, error: res.error });
+      const step = { tool: call.name, args: call.args ?? call.rawArgs, ok: res.ok, error: res.error };
+      trace.push(step);
+      onStep(step);
       if (res.ok) {
         state = res.state;
         if (res.proposal) proposal = res.proposal;
