@@ -7,7 +7,8 @@ import { runAgent } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
-import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay } from './setup.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek } from './setup.js';
+import { replan, toHHMM } from './planner.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -130,6 +131,23 @@ export default {
       if (url.pathname === '/api/day' && body) {
         const state = buildDay(body.template, { date: body.date, weekday: body.weekday, now: body.now });
         return json({ ok: true, state, view: view(state) });
+      }
+
+      // Rest-of-week forecast: where today's debt and open work would land.
+      // Demo mode has no weekly template, so today's debt is the backlog.
+      if (url.pathname === '/api/week' && body) {
+        const s = body.state;
+        const placed = replan(s).placed.map((p) => p.id);
+        const template = body.template || {
+          roles: s.roles,
+          fixed: [],
+          tasks: s.queue.filter((q) => q.status === 'skipped' || q.status === 'cut' || (q.status === 'todo' && !placed.includes(q.id)))
+            .map((q) => ({ ...q, status: 'todo' })),
+          wake: toHHMM(s.settings.wake),
+          sleep: toHHMM(s.settings.sleep),
+        };
+        const done = s.queue.filter((q) => q.status === 'done').map((q) => q.id);
+        return json({ ok: true, ...forecastWeek(template, { weekday: body.weekday, exclude: [...placed, ...done] }) });
       }
 
       // Feedback from testers: short text, stored in KV, never shown publicly.

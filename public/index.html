@@ -46,6 +46,11 @@
     .bar.under i { background: var(--warn); }
     .floor { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 14px; margin-bottom: 8px; }
     .warn { color: var(--warn); }
+    .days { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; margin-top: 10px; }
+    .day { border: 1px solid var(--line); border-radius: 8px; padding: 6px; font-size: 12px; min-height: 60px; }
+    .day b { display: block; font-size: 12px; margin-bottom: 4px; }
+    .day .it { margin: 2px 0; line-height: 1.3; }
+    .day .debt { color: var(--warn); }
     .caption { border-left: 3px solid var(--accent); padding: 6px 10px; margin: 10px 0 0; background: var(--tip); border-radius: 0 8px 8px 0; font-size: 14px; }
     details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
     .tl { position: relative; margin-left: 44px; border-left: 1px solid var(--line); }
@@ -178,7 +183,7 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct',
+        date: 'Fri 30 Oct', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
         late: (m) => `You're about ${m} min behind on this. Want me to re-plan the rest of the day?`,
         lateReplan: 'Re-plan', lateStill: 'Still on it (+15 min)',
         lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
@@ -222,7 +227,7 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10',
+        date: 'Thứ Sáu 30/10', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
         late: (m) => `Bạn đang trễ khoảng ${m} phút ở việc này. Mình xếp lại phần còn lại của ngày nhé?`,
         lateReplan: 'Xếp lại', lateStill: 'Vẫn đang làm (+15 phút)',
         lateText: (m, title) => `Tôi đang trễ ${m} phút: "${title}" vẫn chưa xong. Xếp lại phần còn lại của hôm nay giúp tôi.`,
@@ -280,6 +285,26 @@
       if (data.state) { state = data.state; store.set('meso-state', JSON.stringify(state)); }
       if (data.view) view = data.view;
       render();
+      loadWeek();
+    }
+
+    let weekSeq = 0;
+    async function loadWeek() {
+      const seq = ++weekSeq;
+      const weekday = mode === 'real' ? new Date().getDay() : 5;
+      try {
+        const f = await api('/api/week', { state, template: mode === 'real' ? template : null, weekday });
+        if (seq !== weekSeq) return;
+        // Debt already, or about to be (does not fit today).
+        const debtIds = new Set([...state.queue.filter((q) => q.status === 'skipped' || q.status === 'cut').map((q) => q.id), ...view.doesNotFit.map((x) => x.id)]);
+        const item = (i) => `<div class="it ${debtIds.has(i.id) ? 'debt' : ''}">${debtIds.has(i.id) ? '↩ ' : ''}${esc(i.title)}</div>`;
+        const html = f.days.length ? `<p class="hint" style="margin-top:14px"><b>${t('rest')}</b><br>${t('restHint')}</p><div class="days">${f.days.map((d) => `
+          <div class="day"><b>${t('days')[d.weekday]} · ${(d.items.reduce((s, i) => s + i.minutes, 0) / 60).toFixed(1)}h</b>${d.items.slice(0, 4).map(item).join('')}${d.items.length > 4 ? `<div class="it muted">+${d.items.length - 4} ${t('more')}</div>` : ''}</div>`).join('')}</div>
+          ${f.left.length ? `<p class="hint">${t('leftOver')}: ${f.left.map((i) => esc(i.title)).join(', ')}</p>` : ''}` : '';
+        let box = $('week-forecast');
+        if (!box) { $('week-card').insertAdjacentHTML('beforeend', '<div id="week-forecast"></div>'); box = $('week-forecast'); }
+        box.innerHTML = html;
+      } catch { /* forecast is optional */ }
     }
 
     async function resetDay(time = '07:00') {

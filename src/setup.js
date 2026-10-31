@@ -122,3 +122,24 @@ export function buildDay(template, { date, weekday, now }) {
   }
   return state;
 }
+
+// A forecast for the rest of the week: where open work (including today's
+// debt) would land if every later day started fresh. It is only a preview;
+// each morning the real day is planned again from what actually happened.
+export function forecastWeek(template, { weekday, exclude = [] }) {
+  const days = [];
+  let tasks = template.tasks.map((t) => ({ ...t, status: exclude.includes(t.id) ? 'done' : t.status }));
+  for (let d = weekday + 1; d <= 7; d++) {
+    const wd = d % 7;
+    const day = buildDay({ ...template, tasks }, { date: '', weekday: wd, now: toMin(template.wake) });
+    const placed = replan(day).placed;
+    const ids = new Set(placed.map((p) => p.id));
+    days.push({
+      weekday: wd,
+      items: day.queue.filter((q) => ids.has(q.id)).map((q) => ({ id: q.id, title: q.title, roleId: q.roleId, minutes: q.minutes })),
+      fixed: day.fixed.map((f) => f.title),
+    });
+    tasks = tasks.map((t) => (ids.has(t.id) ? { ...t, status: 'done' } : t));
+  }
+  return { days, left: tasks.filter((t) => t.status === 'todo').map((t) => ({ id: t.id, title: t.title, roleId: t.roleId, minutes: t.minutes })) };
+}
