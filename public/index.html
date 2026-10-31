@@ -76,11 +76,17 @@
       <h1>Mesocycle</h1>
       <div class="row">
         <span class="muted" id="date"></span>
-        <a class="small" id="guide" href="/huong-dan.html" style="font-size:13px;color:var(--accent)">?</a>
+        <a class="small" id="guide" href="/huong-dan" style="font-size:13px;color:var(--accent)">?</a>
         <button class="small" id="lang" title="Tiếng Việt / English"></button>
       </div>
     </header>
 
+    <section class="card" id="account" style="padding:10px 16px">
+      <div class="row" style="justify-content:space-between">
+        <span class="hint" id="account-text" style="margin:0"></span>
+        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button></div>
+      </div>
+    </section>
     <section class="card intro" id="intro"></section>
     <section class="card" id="setup" hidden>
       <h2 data-t="setupTitle"></h2>
@@ -189,7 +195,7 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan stays on this browser.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
         late: (m) => `You're about ${m} min behind on this. Want me to re-plan the rest of the day?`,
         lateReplan: 'Re-plan', lateStill: 'Still on it (+15 min)',
         lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
@@ -233,7 +239,7 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
         late: (m) => `Bạn đang trễ khoảng ${m} phút ở việc này. Mình xếp lại phần còn lại của ngày nhé?`,
         lateReplan: 'Xếp lại', lateStill: 'Vẫn đang làm (+15 phút)',
         lateText: (m, title) => `Tôi đang trễ ${m} phút: "${title}" vẫn chưa xong. Xếp lại phần còn lại của hôm nay giúp tôi.`,
@@ -255,6 +261,74 @@
     const saveTemplate = () => store.set('meso-template', JSON.stringify(template));
     function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; }
 
+    let stats;
+    try { stats = JSON.parse(store.get('meso-stats')) || null; } catch { stats = null; }
+    stats = stats || { replans: 0, approvals: 0, doneMin: 0, debtRepaidMin: 0, days: [] };
+    const saveStats = () => store.set('meso-stats', JSON.stringify(stats));
+    function count(kind, minutes = 0) {
+      if (mode !== 'real') return;
+      const d = today().date;
+      if (!stats.days.includes(d)) stats.days.push(d);
+      if (kind === 'replan') stats.replans++;
+      if (kind === 'approve') stats.approvals++;
+      if (kind === 'done') stats.doneMin += minutes;
+      if (kind === 'repaid') stats.debtRepaidMin += minutes;
+      saveStats();
+    }
+
+    let sid = store.get('meso-sid');
+    let account = null, googleClientId = null, saveTimer = null;
+    const authHeaders = () => (sid ? { Authorization: `Bearer ${sid}` } : {});
+    function renderAccount() {
+      $('account-text').textContent = (account ? t('signedIn')(account.name) : googleClientId ? t('signedOut') : t('authOff')) + (stats.days.length ? ' ' + t('statsLine')(stats) : '');
+      $('logout').hidden = !account;
+      $('logout').textContent = t('logout');
+      $('gsi').hidden = !!account || !googleClientId;
+    }
+    function scheduleSave() {
+      if (!sid || mode !== 'real') return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ mode, template, state, stats: typeof stats !== 'undefined' ? stats : null }) })
+          .then((r) => { if (r.status === 401) signOutLocal(); }).catch(() => {});
+      }, 1500);
+    }
+    function useCloud(data) {
+      if (!data || !data.template) return false;
+      template = data.template; saveTemplate();
+      state = data.state; store.set('meso-state', JSON.stringify(state));
+      if (data.stats) { stats = data.stats; saveStats(); }
+      setMode('real');
+      return true;
+    }
+    function signOutLocal() { sid = null; account = null; store.set('meso-sid', ''); renderAccount(); }
+    async function onGoogle(resp) {
+      try {
+        const data = await api('/api/login', { credential: resp.credential });
+        sid = data.sid; store.set('meso-sid', sid); account = data.user;
+        renderAccount();
+        if (useCloud(data.data)) { await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } }
+        else if (mode === 'real') scheduleSave();
+      } catch (e) { $('account-text').textContent = e.message; }
+    }
+    async function initAccount() {
+      try { googleClientId = (await api('/api/config')).googleClientId; } catch {}
+      if (sid) {
+        const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
+        if (r && r.ok) { account = r.user; useCloud(r.data); } else signOutLocal();
+      }
+      renderAccount();
+      if (googleClientId && !account) {
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+        s.onload = () => {
+          google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogle });
+          google.accounts.id.renderButton($('gsi'), { theme: 'outline', size: 'medium', text: 'signin_with', locale: lang });
+        };
+        document.head.appendChild(s);
+      }
+    }
+
     let lang = store.get('meso-lang') || (navigator.language.startsWith('vi') ? 'vi' : 'en');
     let state = null, view = null;
     const t = (k) => T[lang][k];
@@ -262,6 +336,7 @@
     function applyLang() {
       document.documentElement.lang = lang;
       $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
+      if (typeof renderAccount === 'function') renderAccount();
       $('guide').textContent = lang === 'vi' ? 'Hướng dẫn' : 'Guide';
       document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
       $('say').placeholder = t('placeholder');
@@ -296,6 +371,7 @@
       if (data.view) view = data.view;
       render();
       loadWeek();
+      scheduleSave();
     }
 
     let weekSeq = 0;
@@ -432,9 +508,11 @@
         args = { id: item.id, status: 'skipped' };
       }
       apply(await api('/api/tool', { state, name: 'update_item', args }));
+      if (mode === 'real' && template && kind === 'skip') { const task = template.tasks.find((x) => x.id === item.id); if (task) { task.debt = true; saveTemplate(); } }
       if (mode === 'real' && template && kind === 'done') {
         const task = template.tasks.find((x) => x.id === item.id);
-        if (task) task.status = 'done';
+        if (task) { if (task.debt) count('repaid', args.minutes); task.status = 'done'; }
+        count('done', args.minutes);
         template.done = template.done || {};
         template.done[item.role] = (template.done[item.role] || 0) + args.minutes;
         template.actuals = state.actuals;
@@ -545,6 +623,7 @@
         }
         if (!done || !done.ok) throw new Error(done?.error || 'No answer');
         apply(done);
+        count('replan');
         $('say').value = '';
         showAnswer(done);
         $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s`;
@@ -569,7 +648,10 @@
           <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
       if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
         b.onclick = async () => {
-          apply(await api('/api/approve', { state, ids: p.options[Number(b.dataset.opt)] }));
+          const ids = p.options[Number(b.dataset.opt)];
+          apply(await api('/api/approve', { state, ids }));
+          count('approve');
+          if (mode === 'real' && template) { for (const id of ids) { const task = template.tasks.find((x) => x.id === id); if (task) task.debt = true; } saveTemplate(); }
           $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p>`;
         };
       });
@@ -605,6 +687,7 @@
         const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang });
         template = data.template; saveTemplate();
         setMode('real');
+        if (!sid) $('setup-status').textContent = t('signedOut');
         $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
         $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
         apply(data);
@@ -633,6 +716,12 @@
     };
     $('reset').onclick = () => { setMode('demo'); resetDay($('clock').value || '07:00'); };
     $('clock').onchange = async () => { state.now = toMin($('clock').value); await refresh(); };
+    $('logout').onclick = async () => {
+      await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: '{}' }).catch(() => {});
+      if (window.google) google.accounts.id.disableAutoSelect();
+      signOutLocal();
+      location.reload();
+    };
     $('fb-send').onclick = async () => {
       const text = $('fb-text').value.trim();
       if (!text) return;
@@ -644,6 +733,7 @@
 
     (async () => {
       applyLang();
+      await initAccount();
       try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
       setMode(mode);
       if (mode === 'real' && template) { state = state || null; await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); }

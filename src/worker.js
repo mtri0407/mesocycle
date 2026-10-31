@@ -9,6 +9,7 @@ import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
 import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek } from './setup.js';
 import { replan, toHHMM } from './planner.js';
+import { verifyGoogleToken, createSession, sessionUser, loadData, saveData } from './auth.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -172,6 +173,35 @@ export default {
         };
         const done = s.queue.filter((q) => q.status === 'done').map((q) => q.id);
         return json({ ok: true, ...forecastWeek(template, { weekday: body.weekday, exclude: [...placed, ...done] }) });
+      }
+
+      // Accounts: Google sign-in, then one saved plan per person.
+      if (url.pathname === '/api/config') {
+        return json({ ok: true, googleClientId: env.GOOGLE_CLIENT_ID || null });
+      }
+      if (url.pathname === '/api/login' && body) {
+        if (!env.GOOGLE_CLIENT_ID) return json({ ok: false, error: 'Sign-in is not set up yet' }, 503);
+        try {
+          const claims = await verifyGoogleToken(body.credential, env.GOOGLE_CLIENT_ID);
+          const { sid, user } = await createSession(env, claims);
+          return json({ ok: true, sid, user: { name: user.name, email: user.email }, data: await loadData(env, user) });
+        } catch (err) {
+          return json({ ok: false, error: String(err.message || err) }, 401);
+        }
+      }
+      if (url.pathname === '/api/data') {
+        const user = await sessionUser(request, env);
+        if (!user) return json({ ok: false, code: 'auth', error: 'Please sign in again' }, 401);
+        if (request.method === 'GET') return json({ ok: true, user: { name: user.name, email: user.email }, data: await loadData(env, user) });
+        if (request.method === 'POST' && body) {
+          await saveData(env, user, { mode: body.mode, template: body.template, state: body.state, stats: body.stats });
+          return json({ ok: true });
+        }
+      }
+      if (url.pathname === '/api/logout' && body) {
+        const user = await sessionUser(request, env);
+        if (user) await env.FEEDBACK.delete(`sess:${user.sid}`);
+        return json({ ok: true });
       }
 
       // Feedback from testers: short text, stored in KV, never shown publicly.
