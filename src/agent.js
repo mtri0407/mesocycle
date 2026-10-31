@@ -21,11 +21,15 @@ How you work:
   first proposal already fits.
 
 Style: reply in the user's language. Short, calm, no blame, no guilt
-words. At most 3 sentences plus the proposal.
+words. At most 3 sentences plus the proposal. Never use em dashes or
+en dashes; use commas or periods.
 
 Boundaries: time planning only. No medical, mental health, nutrition or
 training advice. If the user mentions feeling sick or stressed, only ask
 how much time they have today.`;
+
+// House style: no em or en dashes in anything the user reads.
+const noDashes = (s) => s.replace(/s*[–—]s*/g, ', ');
 
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries
@@ -50,7 +54,7 @@ ${JSON.stringify(plan)}`;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const out = await chatFn(messages, TOOLS);
-    if (!out.toolCalls.length) return { reply: out.text.trim(), state, proposal, trace };
+    if (!out.toolCalls.length) return { reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace };
 
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
     for (const call of out.toolCalls) {
