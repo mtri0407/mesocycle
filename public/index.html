@@ -152,6 +152,10 @@
     #promises summary { color: var(--ok); font-weight: 500; }
     #promises.bad summary { color: var(--bad); }
     #promises li { list-style: none; margin-left: -20px; padding: 2px 0; }
+    .option.deadline { border-left: 3px solid var(--r0); }
+    .option.life { border-left: 3px solid var(--r1); }
+    .option.both { border-left: 3px solid var(--ok); }
+    .option ul { margin-top: 2px; }
     .invite { text-align: center; padding: 28px 16px; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
@@ -211,12 +215,10 @@
         <button id="mic"></button>
         <button id="photo" data-t="photo"></button>
         <input type="file" id="photo-file" accept="image/*" hidden>
-        <select id="provider" title="Model">
-          <option value="meta">Muse Spark</option>
-          <option value="open">Muse Spark Open</option>
-        </select>
+        <label class="row" style="font-size:14px;gap:6px"><input type="checkbox" id="private"> <span data-t="privateOn"></span></label>
       </div>
       <p class="hint" data-t="changedHint"></p>
+      <p class="hint" id="private-hint" data-t="privateHint" hidden></p>
       <div id="status" class="hint"></div>
       <ol class="steps" id="live-steps"></ol>
       <div id="answer"></div>
@@ -300,7 +302,7 @@
 
   <script type="module">
     import { handlers } from '/core/handlers.js';
-    import { replan } from '/core/planner.js';
+    import { replan, applyEvent } from '/core/planner.js';
     import { checkPlan } from '/core/invariants.js';
     import { deadlineRadar } from '/core/radar.js';
     import { planDiff, isEmptyDiff } from '/core/diff.js';
@@ -331,11 +333,15 @@
         listening: 'Listening... tap Stop when you finish.', transcribing: 'Turning your voice into text (Muse Voice Transcribe)...',
         thinking: 'The agent is reading your plan...', readingPhoto: 'Reading the photo (Muse Spark)...',
         noMic: 'Microphone not allowed', notCaught: 'Did not catch that, try again',
-        suggested: 'Suggested', or: 'Or', moveToDebt: 'move to debt', approve: 'Approve',
+        suggested: 'Suggested', or: 'Or', moveToDebt: 'Moves to debt', keeps: 'Stays today', approve: 'Approve',
         approved: 'Done. Moved to debt; it comes back when there is real free time.',
         steps: 'Agent steps', stepsHint: '✗ means the code refused a step that broke a rule; the agent read why and fixed it.',
         week: 'This week', of: 'of', floor: 'floor', debt: 'debt', onTrack: 'on track', short: 'short',
         pace: (role, m, b) => `Based on how long ${role} really takes you, this is planned at ${m} min instead of ${b}.`,
+        guardian: { deadline: '🎯 Deadline Guardian', life: '🌿 Life Guardian', both: '🤝 Both guardians agree', code: 'Another way' }, weighing: 'weighing it up...',
+        privateOn: '🔒 More private', privateHint: 'Runs on Muse Spark Open through Baseten, which says it does not keep or train on your requests. Voice still goes to Meta.',
+        kindWork: 'Commitment', kindLife: 'Life',
+        recording: 'The AI is busy right now, so this is a recording of one real run.',
         pullMore: 'Take one more block', weekLine: (d, n, g) => `${d}h done, ${n}h today, goal ${g}h`, weekKey: 'Dark bar: done. Light bar: planned today. Thin line: your weekly minimum.',
         riskLine: (t, d, h) => `${t}, due ${d}, is ${h}h short.`, riskMore: (n) => `And ${n} more.`, riskFix: 'Sort it out', riskText: (t, d) => `The deadline for "${t}" on ${d} is at risk. What can give way?`,
         due: 'due', noRoom: 'no room today', receipt: (n, r, a, b) => `Code checked ${n} step${n === 1 ? '' : 's'} and refused ${r}. ${a} of ${b} promises holding.`, undo: '↩ Undo', undone: 'Back to how it was.',
@@ -404,11 +410,15 @@
         listening: 'Đang nghe... nói xong bấm Dừng.', transcribing: 'Đang chuyển giọng nói thành chữ (Muse Voice Transcribe)...',
         thinking: 'Agent đang đọc kế hoạch của bạn...', readingPhoto: 'Đang đọc ảnh (Muse Spark)...',
         noMic: 'Chưa cho phép micro', notCaught: 'Chưa nghe rõ, thử lại nhé',
-        suggested: 'Đề xuất', or: 'Hoặc', moveToDebt: 'chuyển thành nợ', approve: 'Đồng ý',
+        suggested: 'Đề xuất', or: 'Hoặc', moveToDebt: 'Chuyển thành nợ', keeps: 'Giữ hôm nay', approve: 'Đồng ý',
         approved: 'Xong. Đã chuyển thành nợ, sẽ quay lại khi có giờ trống thật.',
         steps: 'Các bước của agent', stepsHint: '✗ nghĩa là code đã từ chối một bước phạm luật; agent đọc lý do và tự sửa.',
         week: 'Tuần này', of: 'trên', floor: 'tối thiểu', debt: 'nợ', onTrack: 'kịp', short: 'thiếu',
         pace: (role, m, b) => `Theo thời gian thật bạn làm ${role}, việc này được tính ${m} phút thay vì ${b} phút.`,
+        guardian: { deadline: '🎯 Người giữ hạn chót', life: '🌿 Người giữ cuộc sống', both: '🤝 Cả hai đều chọn cách này', code: 'Cách khác' }, weighing: 'đang cân nhắc...',
+        privateOn: '🔒 Riêng tư hơn', privateHint: 'Chạy trên Muse Spark Open qua Baseten, bên này công bố không lưu và không dùng yêu cầu của bạn để huấn luyện. Giọng nói vẫn đi qua Meta.',
+        kindWork: 'Cam kết', kindLife: 'Cuộc sống',
+        recording: 'AI đang bận, đây là bản ghi một lần chạy thật.',
         pullMore: 'Lấy thêm một việc', weekLine: (d, n, g) => `đã làm ${d}h, hôm nay ${n}h, mục tiêu ${g}h`, weekKey: 'Thanh đậm: đã làm. Thanh nhạt: dự kiến hôm nay. Vạch mảnh: mức tối thiểu tuần.',
         riskLine: (t, d, h) => `${t}, hạn ${d}, đang thiếu ${h} giờ.`, riskMore: (n) => `Còn ${n} hạn khác.`, riskFix: 'Xử lý', riskText: (t, d) => `Hạn "${t}" ngày ${d} đang bị đe doạ. Có thể bỏ bớt gì?`,
         due: 'hạn', noRoom: 'hôm nay không còn chỗ', receipt: (n, r, a, b) => `Code đã kiểm tra ${n} lệnh, từ chối ${r}. ${a} trên ${b} lời hứa đang giữ.`, undo: '↩ Hoàn tác', undone: 'Đã trả về như cũ.',
@@ -803,7 +813,7 @@
       template.checkinDate = state.date;
       saveTemplate(); scheduleSave();
       try {
-        const { text } = await api('/api/checkin', { template, state, weekday: realDay(), lang });
+        const { text } = await api('/api/checkin', { template, state, weekday: realDay(), lang, provider: provider() });
         if (!text) return;
         const box = $('checkin');
         box.hidden = false;
@@ -1017,7 +1027,7 @@
       $('next-go').disabled = true;
       $('next-status').textContent = t('nextThinking');
       try {
-        const data = await api('/api/setup', { previous: template, review, lang });
+        const data = await api('/api/setup', { previous: template, review, lang, provider: provider() });
         nextPlan = data.next;
         renderReview();
       } catch (e) {
@@ -1090,7 +1100,7 @@
       const del = (c, id, off) => `<button class="small icon" data-del="${c}" data-i="${esc(id)}" aria-label="${t('remove')}" title="${off ? t('roleInUse') : t('remove')}" ${off ? 'disabled' : ''}>✕</button>`;
 
       $('ed-roles').innerHTML = d.roles.map((r) => `<div class="edit-row"><div class="line"><span class="dot" style="${rcStyle(r.id)}"></span>${field('roles', r.id, 'name', r.name, `type="text" aria-label="${t('role')}"`)}${del('roles', r.id, used(r.id))}</div>
-        <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label></div></div>`).join('');
+        <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><select data-c="roles" data-i="${esc(r.id)}" data-f="kind" aria-label="${t('role')}"><option value="commitment" ${r.kind !== 'life' ? 'selected' : ''}>${t('kindWork')}</option><option value="life" ${r.kind === 'life' ? 'selected' : ''}>${t('kindLife')}</option></select></div></div>`).join('');
 
       const order = [1, 2, 3, 4, 5, 6, 0];
       $('ed-fixed').innerHTML = d.fixed.map((f) => `<div class="edit-row"><div class="line">${field('fixed', f.id, 'title', f.title, `type="text" aria-label="${t('fixed')}"`)}${del('fixed', f.id)}</div>
@@ -1304,7 +1314,7 @@
     function spokenAnswer(done) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
       const p = done.proposal;
-      const options = p ? p.options.map((ids, i) => `${t('optionN')(i + 1)}: ${ids.map(title).join(', ')}.`).join(' ') : '';
+      const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${t('guardian')[o.by] ? `, ${t('guardian')[o.by]}` : ''}: ${o.ids.map(title).join(', ')}.${o.why ? ` ${o.why}` : ''}`).join(' ') : '';
       return `${done.reply || p?.message || ''} ${options}`.trim();
     }
     async function callTurn(text) {
@@ -1400,6 +1410,11 @@
     $('send').onclick = () => send();
 
     // Agent call, streamed: each tool step appears as soon as it happens.
+    const provider = () => (store.get('meso-private') === '1' ? 'open' : 'meta');
+    const syncPrivate = () => { $('private').checked = provider() === 'open'; $('private-hint').hidden = !$('private').checked; };
+    $('private').onchange = () => { store.set('meso-private', $('private').checked ? '1' : ''); syncPrivate(); };
+    syncPrivate();
+
     function askConsent() {
       if (consented()) return true;
       if (!confirm(`${t('consentText')} ${t('consentLink')}${t('consentTail')}`)) return false;
@@ -1418,8 +1433,11 @@
       $('status').textContent = image ? t('readingPhoto') : t('thinking');
       $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
       const started = Date.now();
+      const before = state;
+      const beforeWeek = template;
+      const snap = snapshot();
       try {
-        const res = await fetch('/api/agent', { method: 'POST', headers: aiHeaders, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
+        const res = await fetch('/api/agent', { method: 'POST', headers: aiHeaders, body: JSON.stringify({ state, text, image, provider: provider(), stream: true, lang, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
         if (!res.ok || !res.body) throw new Error(errMsg(await res.json().catch(() => ({}))));
         offline(false);
         const reader = res.body.getReader();
@@ -1434,14 +1452,16 @@
             const line = buf.slice(0, i); buf = buf.slice(i + 1);
             if (!line.trim()) continue;
             const msg = JSON.parse(line);
-            if (msg.type === 'step') $('live-steps').insertAdjacentHTML('beforeend', stepHtml(msg));
+            if (msg.type === 'step') {
+              $('live-steps').insertAdjacentHTML('beforeend', stepHtml(msg));
+              if (msg.ok && msg.state) { state = msg.state; view = msg.view; render(); } // the plan moves while the agent works
+            }
+            if (msg.type === 'council') councilProgress(msg);
             if (msg.type === 'done') done = msg;
           }
         }
         if (!done || !done.ok) throw new Error(done?.error || 'No answer');
-        const before = state;
-        const beforeWeek = template;
-        undoStack.push(snapshot());
+        undoStack.push(snap);
         apply(done);
         syncAgent(before);
         done.receipt = receiptHtml(before, beforeWeek, done);
@@ -1459,6 +1479,14 @@
         return null;
       } finally {
         $('send').disabled = false;
+      }
+    }
+
+    function councilProgress(m) {
+      if (m.stage === 'start') {
+        $('live-steps').insertAdjacentHTML('beforeend', ['deadline', 'life'].map((by) => `<li id="g-${by}">⏳ ${t('guardian')[by]}: ${t('weighing')}</li>`).join(''));
+      } else if ($(`g-${m.by}`)) {
+        $(`g-${m.by}`).innerHTML = `<span class="ok">✓</span> ${t('guardian')[m.by]}: ${esc(m.why)}`;
       }
     }
 
@@ -1500,20 +1528,25 @@
       $('answer').innerHTML = `<p class="reply muted">${t('undone')}</p>`;
     }
 
+    const keptToday = (ids) => replan(applyEvent(state, { type: 'cut', ids })).placed.map((p) => (state.queue.find((q) => q.id === p.id) || {}).title);
+
     function showAnswer(data) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
       const p = data.proposal;
       $('live-steps').innerHTML = '';
       $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
-        (p ? p.options.map((ids, i) => `<div class="option"><strong>${i === 0 ? t('suggested') : t('or')}</strong>: ${t('moveToDebt')}
-          <ul>${ids.map((id) => `<li>${esc(title(id))}</li>`).join('')}</ul>
+        (p ? p.options.map((o, i) => `<div class="option ${o.by || ''}">
+          <div class="row" style="justify-content:space-between"><strong>${t('guardian')[o.by] || (i === 0 ? t('suggested') : t('or'))}</strong>${o.suggested && !p.agreed ? `<span class="chip">${t('suggested')}</span>` : ''}</div>
+          ${o.why ? `<p style="margin:6px 0 0">${esc(o.why)}</p>` : ''}
+          <p style="margin:8px 0 0;font-size:14px"><b>${t('keeps')}:</b> ${esc(keptToday(o.ids).join(', ')) || '-'}</p>
+          <p class="hint" style="margin:4px 0 8px"><b>${t('moveToDebt')}:</b> ${esc(o.ids.map(title).join(', '))}</p>
           <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
         `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
           <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
       if ($('undo')) $('undo').onclick = undo;
       if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
         b.onclick = async () => {
-          const ids = p.options[Number(b.dataset.opt)];
+          const { ids } = p.options[Number(b.dataset.opt)];
           undoStack.push(snapshot());
           apply(await api('/api/approve', { state, ids }));
           pendingProposal = null;
@@ -1525,6 +1558,34 @@
       });
     }
 
+    // If the AI cannot answer during the guided demo, a recording of one real
+    // run plays instead, and says so.
+    async function playRecording() {
+      const events = await fetch(`/core/replay-${lang}.json`).then((r) => r.json());
+      $('send').disabled = true;
+      $('status').textContent = t('recording');
+      $('live-steps').innerHTML = '';
+      let last = 0;
+      const before = state;
+      for (const e of events) {
+        await new Promise((r) => setTimeout(r, Math.min(1500, (e.at - last) / 2)));
+        last = e.at;
+        if (e.type === 'step') {
+          $('live-steps').insertAdjacentHTML('beforeend', stepHtml(e));
+          if (e.ok && e.state) { state = e.state; view = e.view; render(); }
+        }
+        if (e.type === 'council') councilProgress(e);
+        if (e.type === 'done') {
+          apply(e);
+          pendingProposal = e.proposal || null;
+          e.receipt = receiptHtml(before, null, e);
+          showAnswer(e);
+        }
+      }
+      $('send').disabled = false;
+      $('status').textContent = t('recording');
+    }
+
     // Guided demo: a broken afternoon, with a caption for each step.
     async function tryDemo() {
       const cap = (k) => $('captions').insertAdjacentHTML('beforeend', `<p class="caption">${t(k)}</p>`);
@@ -1534,7 +1595,8 @@
       $('say').value = t('demoText');
       cap('cap2');
       $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await send(undefined, null, { demo: true });
+      const live = await send(undefined, null, { demo: true });
+      if (!live) await playRecording();
       cap('cap3');
     }
 
@@ -1554,7 +1616,7 @@
       $('setup-go').disabled = true;
       $('setup-status').textContent = t('building');
       try {
-        const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang });
+        const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang, provider: provider() });
         data.template.history = template?.sample ? [] : template?.history || [];
         store.set('meso-own', '');
         setMode('real');

@@ -4,6 +4,8 @@
 // same code here, so a tool call is checked by the same rules on both sides.
 import { chat, chatSafe, transcribe } from './models.js';
 import { runAgent, noDashes } from './agent.js';
+import { runCouncil, COUNCIL_FORMAT } from './council.js';
+import { tradeoffCandidates } from '../public/core/tradeoff.js';
 import { view } from '../public/core/handlers.js';
 import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, CHECKIN_PROMPT, checkinBrief, mondayOf, weekReview, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from '../public/core/setup.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
@@ -90,6 +92,8 @@ export default {
       const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
       if (request.method === 'POST' && !body) return json({ ok: false, error: 'Body must be JSON' }, 400);
       if (body?.image?.length > MAX_IMAGE_CHARS) return json({ ok: false, error: 'Image too large' }, 413);
+      // Private mode, or past today's budget: the open model answers.
+      const preferred = overBudget || body?.provider === 'open' ? 'open' : 'meta';
 
       if (url.pathname === '/api/health') {
         if (url.searchParams.get('deep') !== '1') return json({ ok: true, provider: env.MODEL_PROVIDER || 'meta' });
@@ -110,8 +114,7 @@ export default {
 
       // Text, voice and photos go to the agent.
       if (url.pathname === '/api/agent' && body) {
-        const chosen = body.provider === 'open' ? 'open' : 'meta';
-        const provider = overBudget ? 'open' : chosen;
+        const provider = preferred;
         if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
         let modelMs = 0, usedProvider = provider, fellBack = false;
         const chatFn = async (messages, tools) => {
@@ -125,7 +128,13 @@ export default {
         const history = (Array.isArray(body.history) ? body.history : []).slice(-8)
           .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string')
           .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
-        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call };
+        // Two advisors at once, with no tools. They only ever see checked cuts.
+        const ask = (system, user) => chatSafe(env, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], maxTokens: 1500, effort: 'minimal', format: COUNCIL_FORMAT, timeoutMs: 10_000 }, provider).then((o) => o.text);
+        const councilFor = (progress) => (state) => {
+          progress({ type: 'council', stage: 'start' });
+          return runCouncil({ candidates: tradeoffCandidates(state), deadlines: view(state).deadlines, lang: body.lang, ask, onPick: ({ by, why }) => progress({ type: 'council', stage: 'pick', by, why }) });
+        };
+        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call, councilFn: councilFor(() => {}) };
         if (!body.stream) {
           const out = await runAgent(args);
           return json({ ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
@@ -136,7 +145,7 @@ export default {
         const send = (obj) => writer.write(new TextEncoder().encode(JSON.stringify(obj) + '\n'));
         ctx.waitUntil((async () => {
           try {
-            const out = await runAgent({ ...args, onStep: (step) => send({ type: 'step', ...step }) });
+            const out = await runAgent({ ...args, councilFn: councilFor(send), onStep: (step) => send({ type: 'step', ...step, view: view(step.state) }) });
             await send({ type: 'done', ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
           } catch (err) {
             await send({ type: 'done', ok: false, error: String(err.message || err) });
@@ -151,7 +160,7 @@ export default {
         const out = await chatSafe(env, { effort: 'minimal', messages: [
           { role: 'system', content: CHECKIN_PROMPT },
           { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\n${checkinBrief(body.template, view(body.state), { weekday: body.weekday, date: body.state.date })}` },
-        ], maxTokens: 3000 }, overBudget ? 'open' : 'meta');
+        ], maxTokens: 3000 }, preferred);
         return json({ ok: true, text: noDashes(out.text.trim()) });
       }
 
@@ -167,7 +176,7 @@ export default {
         const steps = [];
         let modelMs = 0;
         for (let i = 0; i < 3; i++) {
-          const out = await chatSafe(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, overBudget ? 'open' : 'meta');
+          const out = await chatSafe(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, preferred);
           modelMs += out.ms;
           const call = out.toolCalls.find((c) => c.name === 'plan_next_week');
           if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call plan_next_week now.' }); steps.push({ ok: false, error: 'no plan_next_week call' }); continue; }
@@ -192,7 +201,7 @@ export default {
         const steps = [];
         let modelMs = 0;
         for (let i = 0; i < 3; i++) {
-          const out = await chatSafe(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, overBudget ? 'open' : 'meta');
+          const out = await chatSafe(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, preferred);
           modelMs += out.ms;
           const call = out.toolCalls.find((c) => c.name === 'build_week');
           if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call build_week now.' }); steps.push({ ok: false, error: 'no build_week call' }); continue; }

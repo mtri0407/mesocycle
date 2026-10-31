@@ -32,12 +32,12 @@ function baseDay(nowMin) {
     now: nowMin,
     settings: { wake: 7 * 60, sleep: 23 * 60, fillRatio: 0.6, bufferMin: 15 },
     roles: [
-      { id: 'gpa', name: 'University (GPA)', priority: 1, floorMin: 900 },
-      { id: 'company', name: 'Greysteel Education', priority: 2, floorMin: 300 },
-      { id: 'health', name: 'Training', priority: 3, floorMin: 270 },
-      { id: 'project', name: 'Hackathon project', priority: 4, floorMin: 180 },
-      { id: 'clubs', name: 'Clubs', priority: 5 },
-      { id: 'people', name: 'Family & friends', priority: 6, floorMin: 240 },
+      { id: 'gpa', name: 'University (GPA)', priority: 1, floorMin: 900, kind: 'commitment' },
+      { id: 'company', name: 'Greysteel Education', priority: 2, floorMin: 300, kind: 'commitment' },
+      { id: 'health', name: 'Training', priority: 3, floorMin: 270, kind: 'life' },
+      { id: 'project', name: 'Hackathon project', priority: 4, floorMin: 180, kind: 'commitment' },
+      { id: 'clubs', name: 'Clubs', priority: 5, kind: 'commitment' },
+      { id: 'people', name: 'Family & friends', priority: 6, floorMin: 240, kind: 'life' },
     ],
     // Minutes this week outside today: done Mon to Thu, already planned for the
     // weekend (futureBudget), and what the weekend can still make room for (laterMin).

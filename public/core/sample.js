@@ -33,7 +33,7 @@ const PACE_THIS_WEEK = [0.9, 1, 0.3, 1]; // the gym role falls behind, so a goal
 export function sampleWeek({ date, weekday, lang }) {
   const w = WORDS[lang === 'vi' ? 'vi' : 'en'];
   const monday = mondayOf(date);
-  const roles = w.roles.map((name, i) => ({ id: `r${i + 1}`, name, priority: i + 1, targetMin: TARGET[i], floorMin: FLOOR[i] }));
+  const roles = w.roles.map((name, i) => ({ id: `r${i + 1}`, name, priority: i + 1, targetMin: TARGET[i], floorMin: FLOOR[i], kind: i < 2 ? 'commitment' : 'life' }));
   const task = (title, roleId, minutes, rank, extra = {}) => ({ title, roleId, minutes, rank, deadline: null, status: 'todo', ...extra });
   const tasks = [
     ...w.study.map((title, i) => task(title, 'r1', 120, [1, 1, 2, 2, 3, 'extra'][i], i === 1 ? { deadline: addDays(date, 3) } : i === 2 ? { debt: true } : {})),

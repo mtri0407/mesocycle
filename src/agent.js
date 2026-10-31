@@ -4,7 +4,7 @@ import { TOOLS, runTool } from '../public/core/tools.js';
 import { WEEK_TOOLS, WEEK_TOOL_NAMES, ACCEPT_TOOL, runWeekTool } from '../public/core/week-tools.js';
 import { rebaseDay } from '../public/core/setup.js';
 import { deadlineRadar } from '../public/core/radar.js';
-import { applyEvent } from '../public/core/planner.js';
+import { applyEvent, replan } from '../public/core/planner.js';
 
 export const SYSTEM_PROMPT = `You are Mesocycle, a planning agent. You protect the user's deadlines and
 life floors, not the clock. Only fixed events (classes, exams, meetings,
@@ -31,9 +31,10 @@ How you work:
 - If a pending proposal comes with the message and the user clearly picks
   an option, call accept_proposal. Never choose for them.
 - Say a deadline will be met only if a tool result says so.
-- When the plan has cutOptions, propose with them: option 1 as cut_ids,
-  option 2 (if any) as alternative_cut_ids. They are already checked;
-  do not invent your own cut list.
+- When the plan shows needsUser, first make every other change the user
+  asked for, then call propose with one short message saying the day no
+  longer fits. Two advisors prepare the options from cuts that code has
+  already checked, so do not suggest what to cut.
 
 Style: reply in the user's language. Short, calm, no blame, no guilt
 words. At most 3 sentences plus the proposal. Never use em dashes or
@@ -56,17 +57,20 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // onStep(step) is called after every tool call so the UI can show progress live.
 // template and pending are only there for a real week: template unlocks the
 // tools that reach past today, pending is a proposal waiting for an answer.
-export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false }) {
+// councilFn(state) -> { options, agreed } from the two advisors, or null.
+export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false, councilFn = null }) {
   // The agent reads deadline risk from code; it never estimates it.
   const withRadar = (s) => (template ? { ...s, radar: deadlineRadar(template, s, { date: s.date, weekday }) } : s);
   state = withRadar(state);
   // Sending the plan up front saves one model round trip (a get_state call).
   const plan = runTool(state, 'get_state', {}).result;
   const title = (id) => state.queue.find((i) => i.id === id)?.title || id;
+  // Which cuts to offer is the advisors' choice, so the model does not see them.
+  const forModel = ({ cutOptions, ...rest }) => (councilFn ? rest : { ...rest, cutOptions });
   const content = `${userText}
 
-${state.date ? `Today is ${state.date} (weekday ${weekday}, 0=Sunday).\n` : ''}${call ? 'This is a voice call: your reply is read aloud, so no lists, at most 2 short sentences.\n' : ''}${pending ? `Pending proposal: ${pending.options.map((ids, i) => `option ${i + 1} moves to debt: ${ids.map(title).join(', ')}`).join('; ')}.\n` : ''}Current plan:
-${JSON.stringify(plan)}`;
+${state.date ? `Today is ${state.date} (weekday ${weekday}, 0=Sunday).\n` : ''}${call ? 'This is a voice call: your reply is read aloud, so no lists, at most 2 short sentences.\n' : ''}${pending ? `Pending proposal: ${pending.options.map((o, i) => `option ${i + 1}${o.by ? ` (${o.by})` : ''} moves to debt: ${o.ids.map(title).join(', ')}`).join('; ')}.\n` : ''}Current plan:
+${JSON.stringify(forModel(plan))}`;
   const user = image
     ? { role: 'user', content: [{ type: 'text', text: content }, { type: 'image_url', image_url: { url: image } }] }
     : { role: 'user', content };
@@ -76,11 +80,50 @@ ${JSON.stringify(plan)}`;
   let rejections = 0;
   const tools = [...TOOLS, ...(template ? WEEK_TOOLS : []), ...(pending ? [ACCEPT_TOOL] : [])];
   let changedWeek = false;
+  let changedDay = false;
   const finish = (out) => (changedWeek ? { ...out, template } : out);
+  const adopt = (res) => {
+    if (res.proposal) proposal = { ...res.proposal, options: res.proposal.options.map((o) => (o.ids ? o : { ids: o, by: 'code', why: '' })) };
+  };
+
+  // Started as soon as code knows a cut is needed, not when the model gets
+  // round to asking, which saves a round trip of waiting. A later change to
+  // the plan starts it again.
+  let council = null;
+  const planKey = (s) => JSON.stringify([s.now, s.fixed, s.queue.map((q) => [q.id, q.status, q.minutes])]);
+  const startCouncil = () => {
+    if (!councilFn) return Promise.resolve(null);
+    const key = planKey(state);
+    if (council?.key !== key) council = { key, run: Promise.resolve().then(() => councilFn(state)).catch(() => null) };
+    return council.run;
+  };
+
+  // The advisors choose among cuts code has checked. If they fail, the cuts
+  // code would suggest on its own go to the person instead.
+  const askCouncil = async (message) => {
+    if (typeof message !== 'string' || !message.trim()) return { ok: false, error: 'message is required.', state };
+    const picked = await startCouncil();
+    if (picked) return { ok: true, state, result: { proposed: true }, proposal: { message: message.trim(), ...picked } };
+    const [first, second] = runTool(state, 'get_state', {}).result.cutOptions.map((o) => o.map((x) => x.id));
+    if (!first) return { ok: false, error: 'Nothing needs cutting: the plan does not show needsUser.', state };
+    return runTool(state, 'propose', { message, cut_ids: first, alternative_cut_ids: second || [] });
+  };
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const out = await chatFn(messages, tools);
-    if (!out.toolCalls.length) return finish({ reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace });
+    if (!out.toolCalls.length) {
+      // The day stopped fitting and the model did not ask. Rules decide when to
+      // ask, so code asks: nothing may slip out of the day unmentioned.
+      if (councilFn && changedDay && !proposal && replan(state).needsUser) {
+        const res = await askCouncil(out.text.trim() || 'The day no longer fits.');
+        if (res.ok) {
+          adopt(res);
+          trace.push({ tool: 'propose', ok: true });
+          return finish({ reply: noDashes(proposal.message), state, proposal: { ...proposal, message: noDashes(proposal.message) }, trace });
+        }
+      }
+      return finish({ reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace });
+    }
 
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
     for (const call of out.toolCalls) {
@@ -94,24 +137,28 @@ ${JSON.stringify(plan)}`;
           res = { ...res, state, result: runTool(state, 'get_state', {}).result };
         }
       } else if (pending && call.name === 'accept_proposal') {
-        const ids = pending.options[(call.args?.option ?? 0) - 1];
+        const ids = pending.options[(call.args?.option ?? 0) - 1]?.ids;
         res = ids ? runTool(applyEvent(state, { type: 'cut', ids }), 'get_state', {}) : { ok: false, error: 'option must be 1 or 2.', state };
+      } else if (call.name === 'propose' && (councilFn || !call.args?.cut_ids?.length)) {
+        res = await askCouncil(call.args?.message);
       } else res = runTool(state, call.name, call.args);
       const step = { tool: call.name, args: call.args ?? call.rawArgs, ok: res.ok, error: res.error };
       trace.push(step);
-      onStep(step);
+      onStep({ ...step, state: res.state });
       if (res.ok) {
         state = res.state;
-        if (res.proposal) proposal = res.proposal;
+        adopt(res);
+        if (call.name !== 'get_state' && call.name !== 'propose') changedDay = true;
       } else {
         rejections++;
       }
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
-        content: JSON.stringify(res.ok ? res.result : { error: res.error }),
+        content: JSON.stringify(res.ok ? (res.result?.cutOptions ? forModel(res.result) : res.result) : { error: res.error }),
       });
     }
+    if (councilFn && changedDay && !proposal && replan(state).needsUser) startCouncil();
     // A proposal ends the turn: its message is the answer, so one more model
     // call would only cost time.
     if (proposal) return finish({ reply: noDashes(proposal.message), state, proposal: { ...proposal, message: noDashes(proposal.message) }, trace });

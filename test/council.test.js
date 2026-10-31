@@ -119,3 +119,33 @@ test('agent: every tool step reports the plan as it stands, so the screen can mo
   });
   assert.equal(seen[0].state.fixed.length, 1);
 });
+
+test('agent: the council starts as soon as a cut is needed, and runs once', async () => {
+  let runs = 0;
+  let startedBeforeAsked = false;
+  const councilFn = async (state) => { runs++; return runCouncil({ candidates: tradeoffCandidates(state), ask: says({ option: 1, why: 'a' }, { option: 2, why: 'b' }) }); };
+  const steps = [[['add_fixed', { title: 'Meeting', start: '19:00', minutes: 60 }]], [['propose', { message: 'It no longer fits.' }]]];
+  let i = 0;
+  const model = async () => {
+    if (i === 1) { await new Promise((r) => setTimeout(r, 5)); startedBeforeAsked = runs === 1; }
+    const s = steps[i++];
+    return { text: '', toolCalls: s.map((c, k) => ({ id: `c${k}`, name: c[0], args: c[1] })), message: {} };
+  };
+  const out = await runAgent({ state: overflowing(), userText: 'x', chatFn: model, councilFn });
+  assert.equal(startedBeforeAsked, true);
+  assert.equal(runs, 1);
+  assert.equal(out.proposal.options.length, 2);
+});
+
+test('agent: if the model forgets to ask, code asks', async () => {
+  const councilFn = async (state) => runCouncil({ candidates: tradeoffCandidates(state), ask: says({ option: 1, why: 'a' }, { option: 2, why: 'b' }) });
+  const out = await runAgent({ state: overflowing(), userText: 'x', chatFn: script([[['add_fixed', { title: 'Meeting', start: '19:00', minutes: 60 }]], 'Added the meeting.']), councilFn });
+  assert.ok(out.proposal?.options.length >= 1);
+  assert.equal(out.reply, 'Added the meeting.');
+  assert.equal(out.trace.at(-1).tool, 'propose');
+});
+
+test('agent: a plain question on a tight day does not force a proposal', async () => {
+  const out = await runAgent({ state: overflowing(), userText: 'x', chatFn: script(['You have a lot on.']), councilFn: async () => { throw new Error('must not run'); } });
+  assert.equal(out.proposal, null);
+});

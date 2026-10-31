@@ -238,7 +238,7 @@ test('a spoken choice applies the pending proposal; a wrong option changes nothi
   const t = tpl();
   const state = day3(t);
   const id = state.queue[0].id;
-  const pending = { options: [[id]] };
+  const pending = { options: [{ ids: [id] }] };
   const ok = await runAgent({ state, userText: 'option 1', chatFn: script({ id: '1', name: 'accept_proposal', args: { option: 1 } }), pending });
   assert.equal(ok.state.queue.find((q) => q.id === id).status, 'cut');
   const bad = await runAgent({ state, userText: 'option 2', chatFn: script({ id: '1', name: 'accept_proposal', args: { option: 2 } }), pending });

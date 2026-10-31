@@ -87,7 +87,7 @@ test('a proposal from the agent is returned for the user to approve, nothing is 
   const cut = runTool(s, 'get_state', {}).result.doesNotFit.map((x) => x.id);
   const model = fakeModel([[['get_state', {}]], [['propose', { message: 'Cut these?', cut_ids: cut }]], 'never reached']);
   const out = await runAgent({ state: s, userText: 'chiều nay tôi ngủ quên', chatFn: model });
-  assert.deepEqual(out.proposal.options[0], cut);
+  assert.deepEqual(out.proposal.options[0].ids, cut);
   assert.equal(out.reply, 'Cut these?');
   assert.equal(model.seen.length, 2); // the proposal ends the turn, no third call
   assert.ok(out.state.queue.every((i) => i.status === 'todo'));

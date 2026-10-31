@@ -165,6 +165,50 @@ await check('offline: the app reloads and keeps planning, the AI says it needs a
   await p.context().close();
 });
 
+await check('the guided demo survives the AI being down: a labelled recording plays', async () => {
+  const p = await open();
+  await p.route('**/api/agent', (r) => r.abort());
+  await p.click('#try');
+  await p.waitForSelector('[data-opt="0"]', { timeout: 20000 });
+  assert.match(await p.textContent('#status'), /recording/i);
+  assert.ok((await p.locator('.option').count()) >= 1);
+  await p.click('[data-opt="0"]');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-state')).queue.some((q) => q.status === 'cut'));
+  await p.click('#undo');
+  await p.waitForFunction(() => !JSON.parse(localStorage.getItem('meso-state')).queue.some((q) => q.status === 'cut'));
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('a deadline that cannot be met shows at once, with a way to act', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  const t = await local(p, 'meso-template');
+  const s = await local(p, 'meso-state');
+  await p.context().close();
+  for (let i = 0; i < 12; i++) t.tasks.push({ id: `z${i}`, title: `Thesis part ${i}`, roleId: 'r1', minutes: 180, rank: 1, deadline: '2026-11-04', status: 'todo' });
+  const q = await open({ seed: { 'meso-template': JSON.stringify(t), 'meso-state': JSON.stringify({ ...s, now: 600 }), 'meso-mode': 'real', 'meso-consent': '2026-11-01' } });
+  await q.waitForSelector('#risk-bar:not([hidden])');
+  assert.match(await q.textContent('#risk-bar'), /short/);
+  await q.context().close();
+});
+
+await check('finishing everything offers one more block from the backlog', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  for (let i = 0; i < 12 && await p.locator('[data-act=done]').count(); i++) {
+    const title = await p.textContent('.now-title');
+    await p.click('[data-act=done]');
+    await p.waitForFunction((f) => document.querySelector('.now-title').textContent !== f, title);
+  }
+  await p.waitForSelector('#pull-more');
+  await p.click('#pull-more');
+  await p.waitForSelector('[data-act=done]');
+  await p.context().close();
+});
+
 if (AI) {
   await check('AI: set up a week from a description, with goals', async () => {
     const p = await open();

@@ -5,8 +5,7 @@ import { applyEvent, replan } from './planner.js';
 import { floorBroken } from './tools.js';
 
 const RANK = { 1: 1, 2: 2, 3: 3, extra: 4 };
-const POOL = 8;     // only the least important items, so this stays cheap
-const MAX_SIZE = 3; // a cut of more than 3 items is not a real choice
+const POOL = 8; // only the least important items, so this stays cheap
 
 function* subsets(items, size, from = 0, picked = []) {
   if (picked.length === size) { yield picked; return; }
@@ -16,22 +15,27 @@ function* subsets(items, size, from = 0, picked = []) {
 const fits = (state, ids) => !replan(applyEvent(state, { type: 'cut', ids })).needsUser && !floorBroken(state, ids).length;
 
 export function tradeoffCandidates(state, { limit = 5 } = {}) {
-  if (!replan(state).needsUser) return [];
+  const plan = replan(state);
+  if (!plan.needsUser) return [];
   const prio = (it) => state.roles.find((r) => r.id === it.roleId)?.priority ?? 99;
   const pool = state.queue.filter((i) => i.status === 'todo' && i.rank !== 1)
     .sort((a, b) => RANK[b.rank] - RANK[a.rank] || prio(b) - prio(a))
     .slice(0, POOL);
 
-  // Smallest cuts first; a set that contains a working cut is not minimal.
+  // Smallest cuts first; a set that contains a working cut is not minimal. A
+  // set that frees too few minutes cannot work, so it is skipped unchecked.
+  const open = state.queue.filter((i) => i.status === 'todo').reduce((s, i) => s + i.minutes, 0);
+  const need = open - plan.budgetMin;
   const found = [];
-  for (let size = 1; size <= MAX_SIZE; size++) {
+  for (let size = 1; size <= pool.length; size++) {
     for (const set of subsets(pool, size)) {
+      if (set.reduce((s, i) => s + i.minutes, 0) < need) continue;
       const ids = set.map((i) => i.id);
       if (found.some((f) => f.every((id) => ids.includes(id)))) continue;
       if (fits(state, ids)) found.push(ids);
     }
   }
-  const planned = replan(state).cuts;
+  const planned = plan.cuts;
   if (planned.length && fits(state, planned) && !found.some((f) => f.length === planned.length && f.every((id) => planned.includes(id)))) found.push(planned);
 
   const isLife = (it) => state.roles.find((r) => r.id === it.roleId)?.kind === 'life';

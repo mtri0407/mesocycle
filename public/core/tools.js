@@ -61,15 +61,13 @@ export const TOOL_DEFS = [
   },
   {
     name: 'propose',
-    description: 'Ask the user to approve cutting work from today (it becomes debt). Use only when get_state shows needsUser. Give a default and, if possible, an alternative.',
+    description: 'Ask the user to approve cutting work from today (it becomes debt). Use only when the plan shows needsUser. Two advisors prepare the options, so give only your message.',
     parameters: {
       type: 'object',
       properties: {
-        message: { type: 'string', description: 'One or two short sentences for the user.' },
-        cut_ids: { type: 'array', items: { type: 'string' } },
-        alternative_cut_ids: { type: 'array', items: { type: 'string' } },
+        message: { type: 'string', description: 'One short sentence saying the day no longer fits. Do not name what to cut.' },
       },
-      required: ['message', 'cut_ids'],
+      required: ['message'],
     },
   },
 ];
@@ -142,7 +140,7 @@ function cutOptions(state, plan) {
 }
 
 // Would cutting these items push a role under its floor?
-function floorBroken(state, ids) {
+export function floorBroken(state, ids) {
   const plan = replan(applyEvent(state, { type: 'cut', ids }));
   const after = Object.fromEntries(state.roles.map((r) => [r.id, baseMinutes(state.week, r.id)]));
   for (const p of plan.placed) after[p.roleId] += p.end - p.start;

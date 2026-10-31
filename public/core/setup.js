@@ -10,7 +10,9 @@ by calling build_week exactly once.
   family and friends...). priority 1 = most important, in the order they
   give. weeklyHours = what they want; floorHours = the minimum they never
   want to drop below (default about half of weeklyHours; for family and
-  friends at least 2 hours if they mention them).
+  friends at least 2 hours if they mention them). kind = "life" for health,
+  training, rest, family, friends and hobbies, "commitment" for study, work
+  and anything owed to someone else.
 - fixed: things with a set time each week (classes, shifts, practice).
   days use 0=Sunday ... 6=Saturday. Read times from the photo if there is one.
 - tasks: flexible work as blocks of 30 to 120 minutes, enough blocks to
@@ -33,7 +35,7 @@ export const BUILD_WEEK = {
       type: 'object',
       properties: {
         roles: { type: 'array', items: { type: 'object', properties: {
-          name: { type: 'string' }, priority: { type: 'integer' }, weeklyHours: { type: 'number' }, floorHours: { type: 'number' },
+          name: { type: 'string' }, priority: { type: 'integer' }, weeklyHours: { type: 'number' }, floorHours: { type: 'number' }, kind: { type: 'string', enum: ['commitment', 'life'] },
         }, required: ['name', 'priority', 'weeklyHours', 'floorHours'] } },
         fixed: { type: 'array', items: { type: 'object', properties: {
           title: { type: 'string' }, days: { type: 'array', items: { type: 'integer' } }, start: { type: 'string' }, end: { type: 'string' },
@@ -96,7 +98,7 @@ export function validateWeek(a) {
 
   return {
     template: {
-      roles: roles.map((r, i) => ({ id: `r${i + 1}`, name: clean(r.name), priority: r.priority || i + 1, targetMin: Math.round(r.weeklyHours * 60), floorMin: Math.round(r.floorHours * 60) })),
+      roles: roles.map((r, i) => ({ id: `r${i + 1}`, name: clean(r.name), priority: r.priority || i + 1, targetMin: Math.round(r.weeklyHours * 60), floorMin: Math.round(r.floorHours * 60), kind: r.kind === 'life' ? 'life' : 'commitment' })),
       fixed: fixed.map((f, i) => ({ id: `f${i + 1}`, title: clean(f.title, 'Fixed'), days: f.days, start: f.start, end: f.end })),
       tasks: tasks.map((t, i) => ({
         id: `t${i + 1}`, title: clean(t.title, 'Task'), roleId: byName.get(t.role.trim().toLowerCase()),
