@@ -7,6 +7,7 @@ import { runAgent } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay } from './setup.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -92,6 +93,43 @@ export default {
           await writer.close();
         })());
         return new Response(readable, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } });
+      }
+
+      // Set up my week: one description (and maybe a timetable photo) in,
+      // a checked weekly template and today's plan out. Invalid arguments go
+      // back to the model with the reasons, at most 3 tries.
+      if (url.pathname === '/api/setup' && body) {
+        const text = String(body.text || '').trim().slice(0, 4000);
+        if (!text && !body.image) return json({ ok: false, error: 'Describe your week first' }, 400);
+        if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
+        const intro = `Today is ${body.date} (weekday ${body.weekday}, 0=Sunday).\n\n${text || 'Build my week from this timetable.'}`;
+        const user = body.image
+          ? { role: 'user', content: [{ type: 'text', text: intro }, { type: 'image_url', image_url: { url: body.image } }] }
+          : { role: 'user', content: intro };
+        const messages = [{ role: 'system', content: SETUP_PROMPT }, user];
+        const steps = [];
+        let modelMs = 0;
+        for (let i = 0; i < 3; i++) {
+          const out = await chat(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000 }, 'meta');
+          modelMs += out.ms;
+          const call = out.toolCalls.find((c) => c.name === 'build_week');
+          if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call build_week now.' }); steps.push({ ok: false, error: 'no build_week call' }); continue; }
+          const v = validateWeek(call.args);
+          steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
+          if (!v.errors) {
+            const state = buildDay(v.template, { date: body.date, weekday: body.weekday, now: body.now });
+            return json({ ok: true, template: v.template, state, view: view(state), steps, modelMs });
+          }
+          messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
+          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.errors }) });
+        }
+        return json({ ok: false, error: 'Could not build a valid week, try describing it again.', steps, modelMs }, 422);
+      }
+
+      // Today's plan from a saved weekly template (a new day, or after edits).
+      if (url.pathname === '/api/day' && body) {
+        const state = buildDay(body.template, { date: body.date, weekday: body.weekday, now: body.now });
+        return json({ ok: true, state, view: view(state) });
       }
 
       // Feedback from testers: short text, stored in KV, never shown publicly.
