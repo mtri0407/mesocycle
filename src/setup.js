@@ -415,3 +415,24 @@ export function checkTemplate(t, lang = 'en') {
   }
   return errors;
 }
+
+export const CHECKIN_PROMPT = `You write a person's short morning check-in for a planning app.
+You only read the plan; you change nothing and have no tools.
+
+Say what comes first today, then the one thing that matters most: debt to
+pay back, a goal falling behind, or work that does not fit today. End with
+one simple question. At most 3 short sentences. Calm, no blame, no guilt
+words. Use only what is in the data. Never use em dashes or en dashes. No
+medical, mental health, nutrition or training advice.`;
+
+// What the check-in may see: names and times, nothing about the account.
+export function checkinBrief(t, view, { weekday, date }) {
+  const pace = new Map(goalPace(t, { weekday, date }).map((g) => [g.id, g]));
+  return JSON.stringify({
+    first: view.queue.slice(0, 3).map((q) => ({ title: q.title, start: q.start })),
+    fixedToday: view.fixed.map((f) => ({ title: f.title, start: f.start })),
+    doesNotFit: view.doesNotFit.map((x) => x.title),
+    debt: debtTasks(t).map((x) => ({ title: x.title, minutes: x.minutes })),
+    goals: (t.goals || []).map((g) => ({ title: g.title, behind: pace.get(g.id)?.behind || false, daysLeft: pace.get(g.id)?.daysLeft ?? null })),
+  });
+}

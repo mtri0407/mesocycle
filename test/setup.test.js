@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, validateNext, adoptNext, checkTemplate } from '../src/setup.js';
+import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, validateNext, adoptNext, checkTemplate } from '../src/setup.js';
 import { replan } from '../src/planner.js';
 import { checkPlan } from '../src/invariants.js';
 
@@ -173,4 +173,14 @@ test('hand edits are checked', () => {
   assert.equal(checkTemplate({ ...t, roles: [{ ...t.roles[0], floorMin: 9999 }, t.roles[1]] }).length, 1);
   assert.equal(checkTemplate({ ...t, fixed: [{ title: 'x', days: [], start: '09:00', end: '08:00' }] }).length, 2);
   assert.ok(checkTemplate({ ...t, roles: [t.roles[1]] }).some((e) => e.includes('no longer exists')));
+});
+
+test('the check-in sees plan names and pace, nothing else', () => {
+  const t = tpl({ goals: [{ id: 'g1', title: 'GPA', roleId: 'r1', deadline: null }], done: {}, email: 'a@b.c' });
+  t.tasks[1].debt = true;
+  const view = { queue: [{ title: 'Study 1', start: '11:00' }], fixed: [], doesNotFit: [] };
+  const brief = JSON.parse(checkinBrief(t, view, { weekday: 5, date: '2026-11-06' }));
+  assert.equal(brief.debt.length, 1);
+  assert.equal(brief.goals[0].behind, true);
+  assert.ok(!JSON.stringify(brief).includes('a@b.c'));
 });

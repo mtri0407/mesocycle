@@ -22,8 +22,25 @@ I built a planner with an automatic "reschedule" button before this hackathon, a
 6. **Connect it to your goals.** Goals (a GPA, a revenue target, an exam) link to the roles that serve them, show the hours they got this week, and warn when they fall behind pace.
 7. **Close the loop every week.** A new week closes the old one automatically: plan against reality by role, debt carried over. Muse Spark then proposes next week's hours from what really happened, with a reason for each change. Nothing applies until you approve it, and code rejects any proposal that drops a floor or asks for more hours than the week can hold. Goals, fixed events and sleep are out of its reach.
 8. **Edit anything directly.** Roles, fixed events, tasks, goals, wake and sleep. Editing mid-day keeps finished work, debt and what the agent added.
+9. **Start the day with a check-in.** The first open of each day gets a short read-only summary from Muse Spark: what comes first, what matters most, and one question.
+10. **Talk, and watch the words appear.** Speech streams live through the Worker to Muse Voice Transcribe. If the live connection fails, the recording is transcribed the old way, so nothing you said is lost.
 
 Or press **Try the demo** to replay the author's real broken Friday before midterms.
+
+## Why not Motion, Reclaim or Google Calendar?
+
+Motion and Reclaim are serious products, and by their own descriptions they also move work when plans change: Motion "recalculates your schedule when plans change", and Reclaim "dynamically adapts meetings, tasks, and focus time". The differences below are design choices in Mesocycle, checked against this repository; I have not tested those products in depth.
+
+| Mesocycle's choice | Why |
+|---|---|
+| Today only: flexible work is a queue, and later days are never filled in advance | Missed work becomes debt instead of a guess about a future that has not happened |
+| Weekly floors are hard rules in code | Family or training cannot silently lose to work; a cut that breaks a floor is rejected |
+| You describe a broken day in one sentence, by voice or text | No dragging blocks around when you are already behind |
+| The AI cannot edit your plan, only call checked tools, and every step is shown | 100,000 simulated broken days, 0 broken promises |
+| Sleep is never moved by the agent, and at most 60% of free time is planned | The plan assumes real life happens |
+| Open source, and runs on open weights too | The same agent works on Muse Spark Open |
+
+Google Calendar stores the events you put in it; re-planning a broken day is left to you.
 
 ## How it works
 
@@ -51,7 +68,8 @@ The model never edits the plan. It calls six tools (`get_state`, `add_fixed`, `a
 | Planning agent with tool calling | `muse-spark-1.3` | Meta Model API |
 | Same agent on open weights | `meta-models/muse-spark-open-1026` | Baseten |
 | Reading a timetable or task-list photo | `muse-spark-1.3` (image understanding) | Meta Model API |
-| Voice check-in | `muse-voice-transcribe-1.0` | Meta Model API |
+| Live voice input, streamed through the Worker | `muse-voice-transcribe-1.0` (realtime WebSocket, with the batch endpoint as fallback) | Meta Model API |
+| Next-week proposal and morning check-in | `muse-spark-1.3` | Meta Model API |
 
 Both chat providers speak the OpenAI Chat Completions format, so `src/models.js` switches with one setting. The model picker in the app runs the same agent, tools and rules on either model.
 
@@ -84,12 +102,16 @@ The checker itself was tested by planting bugs on purpose (sleep overrun, silent
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # put your keys in .dev.vars
-npm test                         # 30 tests, no model calls
+npm test                         # 47 tests, no model calls
 npm run simulate                 # the stress test
 npm run dev                      # open http://localhost:8787
 ```
 
 Keys are read from environment variables (`MODEL_API_KEY`, `BASETEN_API_KEY`). `.dev.vars` is git-ignored; in production they are Cloudflare secrets. Runs on Cloudflare Workers.
+
+## Privacy
+
+See the [privacy policy](https://mesocycle.minhtriphamnguyen69.workers.dev/privacy). You must be 18 or older. Signed-in users can delete their data from the app.
 
 ## Boundaries
 

@@ -25,3 +25,15 @@ test('deleting needs a valid session', async () => {
   assert.equal((await del()).status, 401);
   assert.equal(store.m.size, 1);
 });
+
+test('signing in needs consent first', async () => {
+  const res = await worker.fetch(new Request('http://x/api/login', { method: 'POST', body: JSON.stringify({ credential: 'x' }) }), { FEEDBACK: fakeKv({}), GOOGLE_CLIENT_ID: 'id' }, {});
+  assert.equal(res.status, 400);
+});
+
+test('deleting also removes the consent record', async () => {
+  const store = fakeKv({ [`sess:${sid}`]: JSON.stringify({ sub: '1' }), 'user:1': '{}', 'consent:1': '{}' });
+  kv = () => store;
+  await del(sid);
+  assert.equal(store.m.size, 0);
+});

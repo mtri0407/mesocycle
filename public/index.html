@@ -128,6 +128,9 @@
     .icon { padding: 3px 9px; font-size: 14px; color: var(--muted); }
     #edit-bar { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 4; margin-top: 8px; box-shadow: 0 4px 18px rgba(0, 0, 0, .14); }
     @media (min-width: 760px) { #edit-bar { bottom: 12px; } }
+    .consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .consent[hidden] { display: none; }
+    .consent input { margin-top: 3px; flex: none; }
     .invite { text-align: center; padding: 28px 16px; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
@@ -154,6 +157,7 @@
       <h2 data-t="setupTitle"></h2>
       <p class="hint" data-t="setupHint" style="margin-top:0"></p>
       <textarea id="setup-text" style="min-height:120px"></textarea>
+      <label class="consent" data-consent><input type="checkbox" id="setup-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
       <div class="row" style="margin-top:8px">
         <button class="primary" id="setup-go" data-t="build"></button>
         <button id="setup-mic"></button>
@@ -163,6 +167,7 @@
       </div>
       <div class="hint" id="setup-status"></div>
     </section>
+    <section class="card caption" id="checkin" hidden style="margin:0 0 14px"></section>
     <section class="card now" id="now-card"></section>
     <section class="card" id="next-card"></section>
     <details class="card" id="tl-card" open>
@@ -216,6 +221,7 @@
     <section class="card" id="account" style="padding:10px 16px">
       <div class="row" style="justify-content:space-between">
         <span class="hint" id="account-text" style="margin:0"></span>
+        <label class="consent" data-consent><input type="checkbox" id="login-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
         <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button><button class="small" id="delete-data" data-t="deleteData" hidden></button></div>
       </div>
     </section>
@@ -292,7 +298,8 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan is saved in this browser. AI requests go to the providers in the privacy policy.', privacyLink: 'Privacy', deleteData: 'Delete my data', deleteAsk: 'Delete your saved plan from the server and this browser? This cannot be undone.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, consentText: 'I am 18 or older and agree to the', consentLink: 'privacy policy', consentTail: ', including sending what I type, say or photograph to AI providers.', consentNeed: 'Please tick the box first.',
+        checkinTitle: 'This morning', checkinOk: 'Sounds good', checkinChange: 'Something changed', signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan is saved in this browser. AI requests go to the providers in the privacy policy.', privacyLink: 'Privacy', deleteData: 'Delete my data', deleteAsk: 'Delete your saved plan from the server and this browser? This cannot be undone.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
         weekTab: 'Week', goalsTab: 'Goals', role: 'Role', planned: 'Planned', actual: 'Actual',
         reviewTitle: 'Week review', reviewBtn: 'Review this week', reviewLast: 'Last week', keepWeek: 'Keep the same week',
         reviewLine: (d, n, h) => `${d} of ${n} blocks done. ${h}h of debt carried over.`,
@@ -353,7 +360,8 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này. Yêu cầu AI được gửi tới các nhà cung cấp nêu trong chính sách quyền riêng tư.', privacyLink: 'Quyền riêng tư', deleteData: 'Xoá dữ liệu của tôi', deleteAsk: 'Xoá kế hoạch đã lưu trên máy chủ và trình duyệt này? Không thể hoàn tác.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, consentText: 'Tôi đủ 18 tuổi và đồng ý với', consentLink: 'chính sách quyền riêng tư', consentTail: ', gồm việc gửi nội dung tôi gõ, nói hoặc chụp tới nhà cung cấp AI.', consentNeed: 'Vui lòng tích vào ô xác nhận trước.',
+        checkinTitle: 'Sáng nay', checkinOk: 'Ổn rồi', checkinChange: 'Có thay đổi', signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này. Yêu cầu AI được gửi tới các nhà cung cấp nêu trong chính sách quyền riêng tư.', privacyLink: 'Quyền riêng tư', deleteData: 'Xoá dữ liệu của tôi', deleteAsk: 'Xoá kế hoạch đã lưu trên máy chủ và trình duyệt này? Không thể hoàn tác.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
         weekTab: 'Tuần', goalsTab: 'Mục tiêu', role: 'Vai trò', planned: 'Kế hoạch', actual: 'Thực tế',
         reviewTitle: 'Tổng kết tuần', reviewBtn: 'Tổng kết tuần này', reviewLast: 'Tuần trước', keepWeek: 'Giữ nguyên tuần cũ',
         reviewLine: (d, n, h) => `Xong ${d} trên ${n} block. Chuyển sang ${h} giờ nợ.`,
@@ -410,12 +418,22 @@
     let sid = store.get('meso-sid');
     let account = null, googleClientId = null, saveTimer = null;
     const authHeaders = () => (sid ? { Authorization: `Bearer ${sid}` } : {});
+    const CONSENT_VERSION = '2026-11-01';
+    const consented = () => store.get('meso-consent') === CONSENT_VERSION;
+    function renderConsent() {
+      for (const id of ['login-consent', 'setup-consent']) {
+        $(id).checked = consented();
+        $(id).closest('[data-consent]').hidden = consented();
+      }
+      $('login-consent').closest('[data-consent]').hidden = consented() || !!account || !googleClientId;
+    }
+    function giveConsent() { store.set('meso-consent', CONSENT_VERSION); renderConsent(); renderAccount(); }
     function renderAccount() {
       $('account-text').textContent = (account ? t('signedIn')(account.name) : googleClientId ? t('signedOut') : t('authOff')) + (stats.days.length ? ' ' + t('statsLine')(stats) : '');
       $('logout').hidden = !account;
       $('delete-data').hidden = !account;
       $('logout').textContent = t('logout');
-      $('gsi').hidden = !!account || !googleClientId;
+      $('gsi').hidden = !!account || !googleClientId || !consented();
     }
     function scheduleSave() {
       if (!sid || mode !== 'real') return;
@@ -436,7 +454,7 @@
     function signOutLocal() { sid = null; account = null; store.set('meso-sid', ''); renderAccount(); }
     async function onGoogle(resp) {
       try {
-        const data = await api('/api/login', { credential: resp.credential });
+        const data = await api('/api/login', { credential: resp.credential, consent: CONSENT_VERSION });
         sid = data.sid; store.set('meso-sid', sid); account = data.user;
         renderAccount();
         if (useCloud(data.data)) { await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } }
@@ -449,6 +467,7 @@
         const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
         if (r && r.ok) { account = r.user; useCloud(r.data); } else signOutLocal();
       }
+      renderConsent();
       renderAccount();
       if (googleClientId && !account) {
         const s = document.createElement('script');
@@ -649,6 +668,22 @@
         if (q.status === 'done') recordDone(q.id, q.roleId, (state.actuals || []).at(-1)?.actual || q.minutes);
         if (q.status === 'skipped' || q.status === 'cut') { const task = template.tasks.find((x) => x.id === q.id); if (task) { task.debt = true; saveTemplate(); } }
       }
+    }
+
+    async function morningCheckin() {
+      if (mode !== 'real' || !template || !view?.queue.length || template.checkinDate === state.date) return;
+      template.checkinDate = state.date;
+      saveTemplate(); scheduleSave();
+      try {
+        const { text } = await api('/api/checkin', { template, state, weekday: realDay(), lang });
+        if (!text) return;
+        const box = $('checkin');
+        box.hidden = false;
+        box.innerHTML = `<h2>${t('checkinTitle')}</h2><p style="margin:0 0 10px">${esc(text)}</p>
+          <div class="row"><button class="primary small" id="checkin-ok">${t('checkinOk')}</button><button class="small" id="checkin-change">${t('checkinChange')}</button></div>`;
+        $('checkin-ok').onclick = () => { box.hidden = true; };
+        $('checkin-change').onclick = () => { box.hidden = true; $('say').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('say').focus(); };
+      } catch { /* the day works fine without it */ }
     }
 
     async function act(kind, item) {
@@ -916,13 +951,21 @@
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
       catch { status.textContent = t('noMic'); return; }
       const chunks = [];
+      const live = startLive(stream, status);
       recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunks.push(e.data);
       recorder.onstop = async () => {
-        stream.getTracks().forEach((tr) => tr.stop());
         recorder = null;
         btn.textContent = t('speak');
         status.textContent = t('transcribing');
+        const heard = await live.finish();
+        stream.getTracks().forEach((tr) => tr.stop());
+        if (heard) {
+          status.textContent = '';
+          if (target === 'setup') $('setup-text').value = ($('setup-text').value + ' ' + heard).trim();
+          else { $('say').value = heard; send(); }
+          return;
+        }
         try {
           const wav = await toWav(new Blob(chunks));
           const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
@@ -936,6 +979,50 @@
       recorder.start();
       btn.textContent = t('stop');
       status.textContent = t('listening');
+    }
+
+    // Streams the microphone as 24 kHz PCM and shows words as they come.
+    // finish() resolves with the text, or '' if live voice did not work, in
+    // which case the recording is transcribed the old way and nothing is lost.
+    function startLive(stream, status) {
+      let finals = '', partial = '', failed = false, closed;
+      const whenClosed = new Promise((r) => { closed = r; });
+      let ws, ctx, node;
+      const early = [];
+      try {
+        ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice`);
+        ws.binaryType = 'arraybuffer';
+        ws.onmessage = ({ data }) => {
+          const m = JSON.parse(data);
+          if (m.type === 'error') { failed = true; return; }
+          if (m.final) { finals = `${finals} ${m.text}`.trim(); partial = ''; } else partial = m.text;
+          status.textContent = `${finals} ${partial}`.trim() || t('listening');
+        };
+        ws.onopen = () => early.splice(0).forEach((b) => ws.send(b));
+        ws.onerror = () => { failed = true; };
+        ws.onclose = () => closed();
+        ctx = new AudioContext({ sampleRate: 24000 });
+        node = ctx.createScriptProcessor(2048, 1, 1); // about 85 ms a frame
+        node.onaudioprocess = (e) => {
+          if (ws.readyState > 1) return;
+          const pcm = e.inputBuffer.getChannelData(0);
+          const out = new Int16Array(pcm.length);
+          for (let i = 0; i < pcm.length; i++) out[i] = Math.max(-1, Math.min(1, pcm[i])) * 0x7fff;
+          // The connection takes about a second; the first words wait for it.
+          if (ws.readyState === 0) early.push(out.buffer); else ws.send(out.buffer);
+        };
+        ctx.createMediaStreamSource(stream).connect(node);
+        node.connect(ctx.destination);
+      } catch { failed = true; closed(); }
+      return {
+        async finish() {
+          try { node?.disconnect(); ctx?.close(); } catch {}
+          if (ws?.readyState === 1) ws.send('{"type":"endStream"}'); else closed();
+          await Promise.race([whenClosed, new Promise((r) => setTimeout(r, 5000))]);
+          try { ws?.close(); } catch {}
+          return failed ? '' : `${finals} ${partial}`.trim();
+        },
+      };
     }
 
     async function toWav(blob) {
@@ -1066,6 +1153,7 @@
     $('setup-go').onclick = async () => {
       const text = $('setup-text').value.trim();
       if (!text && !setupImage) return;
+      if (!consented()) { $('setup-status').textContent = t('consentNeed'); return; }
       $('setup-go').disabled = true;
       $('setup-status').textContent = t('building');
       try {
@@ -1088,7 +1176,7 @@
     async function tick() {
       if (mode !== 'real' || !state || $('send').disabled) return;
       const d = today();
-      if (state.date !== d.date && template) { apply(await api('/api/day', { template, state, ...d, now: realNow() })); return; }
+      if (state.date !== d.date && template) { apply(await api('/api/day', { template, state, ...d, now: realNow() })); morningCheckin(); return; }
       if (realNow() > state.now) { state.now = realNow(); await refresh(); }
     }
     setInterval(tick, 60000);
@@ -1108,6 +1196,8 @@
       location.reload();
     };
     // Nothing of a signed-in person stays behind on a shared computer.
+    for (const id of ['login-consent', 'setup-consent']) $(id).onchange = (e) => { if (e.target.checked) giveConsent(); };
+
     function clearLocal() {
       clearTimeout(saveTimer);
       try { Object.keys(localStorage).filter((k) => k.startsWith('meso-')).forEach((k) => localStorage.removeItem(k)); } catch {}
@@ -1137,7 +1227,7 @@
       await initAccount();
       try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
       setMode(mode);
-      if (mode === 'real' && template) { state = state || null; await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); }
+      if (mode === 'real' && template) { state = state || null; await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); morningCheckin(); }
       else if (state) await refresh(); else await resetDay();
     })();
   </script>

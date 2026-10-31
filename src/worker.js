@@ -3,13 +3,14 @@
 // The browser keeps the plan and sends it with each request. Signed-in users
 // also get a saved copy in KV (see auth.js).
 import { chat, transcribe } from './models.js';
-import { runAgent } from './agent.js';
+import { runAgent, noDashes } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
-import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, rollover, rebaseDay, adoptNext, mondayOf, goalPace, weekReview, checkTemplate, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from './setup.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, CHECKIN_PROMPT, checkinBrief, rollover, rebaseDay, adoptNext, mondayOf, goalPace, weekReview, checkTemplate, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from './setup.js';
 import { replan, toHHMM } from './planner.js';
-import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData } from './auth.js';
+import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
+import { voiceProxy } from './voice.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -22,7 +23,7 @@ const view = (state) => runTool(state, 'get_state', {}).result;
 
 // Guard for routes that call a model: at most 12 a minute per visitor
 // (Cloudflare rate limit binding) and a daily ceiling for the whole app (KV).
-const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe'];
+const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin'];
 const DAILY_CAP = 3000;
 async function aiGuard(request, env) {
   const ip = request.headers.get('cf-connecting-ip') || 'local';
@@ -46,6 +47,13 @@ export default {
       if (request.method === 'POST' && AI_ROUTES.includes(url.pathname)) {
         const blocked = await aiGuard(request, env);
         if (blocked) return blocked;
+      }
+
+      // Live voice: a WebSocket through this Worker, which holds the key.
+      if (url.pathname === '/api/voice') {
+        if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'WebSocket only' }, 426);
+        const blocked = await aiGuard(request, env);
+        return blocked || await voiceProxy(env);
       }
 
       // Voice check-in: the browser sends a WAV clip, we return the text.
@@ -119,6 +127,15 @@ export default {
           await writer.close();
         })());
         return new Response(readable, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } });
+      }
+
+      // Morning check-in: read-only, no tools, so it cannot change the plan.
+      if (url.pathname === '/api/checkin' && body) {
+        const out = await chat(env, { messages: [
+          { role: 'system', content: CHECKIN_PROMPT },
+          { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\n${checkinBrief(body.template, view(body.state), { weekday: body.weekday, date: body.state.date })}` },
+        ], maxTokens: 6000 }, 'meta'); // the model thinks first; 1500 could leave no answer
+        return json({ ok: true, text: noDashes(out.text.trim()) });
       }
 
       // Set up my week: one description (and maybe a timetable photo) in,
@@ -217,9 +234,11 @@ export default {
       }
       if (url.pathname === '/api/login' && body) {
         if (!env.GOOGLE_CLIENT_ID) return json({ ok: false, error: 'Sign-in is not set up yet' }, 503);
+        if (!body.consent) return json({ ok: false, error: 'Please confirm you are 18 or older and agree to the privacy policy.' }, 400);
         try {
           const claims = await verifyGoogleToken(body.credential, env.GOOGLE_CLIENT_ID);
           const { sid, user } = await createSession(env, claims);
+          await recordConsent(env, user, body.consent);
           return json({ ok: true, sid, user: { name: user.name, email: user.email }, data: await loadData(env, user) });
         } catch (err) {
           return json({ ok: false, error: String(err.message || err) }, 401);

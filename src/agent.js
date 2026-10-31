@@ -31,7 +31,7 @@ how much time they have today.`;
 
 // House style: no em or en dashes in anything the user reads.
 const DASHES = new RegExp('\\s*[' + String.fromCharCode(0x2013, 0x2014) + ']\\s*', 'g');
-const noDashes = (s) => s.replace(DASHES, ', ');
+export const noDashes = (s) => s.replace(DASHES, ', ');
 
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries

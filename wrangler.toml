@@ -2,13 +2,17 @@ name = "mesocycle"
 main = "src/worker.js"
 compatibility_date = "2026-10-01"
 
+# Public by design: Google shows this id to every browser.
+[vars]
+GOOGLE_CLIENT_ID = "1075267755415-ocr5864jp2bmkmfjojlbtl3im52dqqam.apps.googleusercontent.com"
+
 # The web app (HTML/CSS/JS) is served from public/
 [assets]
 directory = "public"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# Feedback from people trying the app (read with: npx wrangler kv key list --binding FEEDBACK --remote)
+# Feedback from people trying the app (list with --prefix 2026- so sessions are not printed: npx wrangler kv key list --binding FEEDBACK --remote --prefix 2026-)
 [[kv_namespaces]]
 binding = "FEEDBACK"
 id = "314d552393544b1faffe8fd90abedaa4"

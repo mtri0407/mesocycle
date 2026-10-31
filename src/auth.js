@@ -46,6 +46,11 @@ export async function createSession(env, claims) {
   return { sid, user };
 }
 
+// Keeps proof of what the person agreed to and when (Vietnam's data law).
+export async function recordConsent(env, user, version) {
+  await env.FEEDBACK.put(`consent:${user.sub}`, JSON.stringify({ version: String(version).slice(0, 20), at: new Date().toISOString() }));
+}
+
 export async function sessionUser(request, env) {
   const sid = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!/^[0-9a-f]{64}$/.test(sid)) return null;
@@ -62,6 +67,7 @@ export async function loadData(env, user) {
 // on their own within 30 days; KV cannot look them up by person.
 export async function deleteData(env, user) {
   await env.FEEDBACK.delete(`user:${user.sub}`);
+  await env.FEEDBACK.delete(`consent:${user.sub}`);
   await env.FEEDBACK.delete(`sess:${user.sid}`);
 }
 
