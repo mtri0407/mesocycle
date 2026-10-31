@@ -6,6 +6,9 @@
   <title>Mesocycle</title>
   <meta name="description" content="A planning agent that re-plans your day when life breaks the plan.">
   <meta name="theme-color" content="#2457d6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
@@ -68,25 +71,84 @@
     .tl .sleep { position: absolute; left: 8px; right: 0; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--muted); padding-top: 2px; }
     @media (prefers-reduced-motion: reduce) { .tl .blk, .tl .nowline { transition: none; } }
     input[type=time], select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+    :root {
+      --r0: #2457d6; --r1: #0f8a6a; --r2: #c2410c; --r3: #8b3fd1; --r4: #c0266d; --r5: #8a6d00; --r6: #0e7490; --r7: #4b5563;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --r0: #7ea3ff; --r1: #4cc9a6; --r2: #fb923c; --r3: #c49bff; --r4: #f472b6; --r5: #e0c050; --r6: #4fc3dc; --r7: #aab3c0;
+      }
+    }
+    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; font-feature-settings: 'cv11', 'ss03'; -webkit-font-smoothing: antialiased; }
+    main { max-width: 640px; padding: 12px 16px calc(96px + env(safe-area-inset-bottom)); }
+    .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; max-width: 640px; margin: 0 auto; padding: 10px 16px; background: var(--bg); }
+    .brand { font-size: 18px; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+    .top .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    #tabs { position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+    #tabs button { border: 0; border-radius: 0; background: none; color: var(--muted); padding: 10px 4px 12px; font-size: 13px; font-weight: 500; border-top: 2px solid transparent; }
+    #tabs button.on { color: var(--accent); border-top-color: var(--accent); font-weight: 650; }
+    #tabs b { display: block; font-size: 18px; line-height: 1.2; font-weight: 400; }
+    @media (min-width: 760px) {
+      #tabs { position: static; display: flex; gap: 4px; background: none; border: 0; padding: 0; }
+      #tabs button { padding: 6px 12px; border-radius: 8px; border: 0; font-size: 14px; }
+      #tabs button.on { background: var(--chip); }
+      #tabs b { display: none; }
+      main { padding-bottom: 48px; }
+    }
+    h2 { letter-spacing: .04em; font-weight: 600; }
+    .card { border-radius: 16px; }
+    .now { background: color-mix(in srgb, var(--rc, var(--accent)) 9%, var(--card)); border-color: color-mix(in srgb, var(--rc, var(--accent)) 35%, var(--line)); border-left: 6px solid var(--rc, var(--accent)); padding: 18px; }
+    .now-title { font-size: 27px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; margin: 4px 0 6px; }
+    .chip.role { color: var(--fg); background: color-mix(in srgb, var(--rc) 16%, var(--card)); }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--rc); margin-right: 6px; flex: none; }
+    .tl .blk { background: color-mix(in srgb, var(--rc, var(--accent)) 13%, var(--card)); border: 0; border-left: 3px solid var(--rc, var(--accent)); }
+    .bar i, .bar.under i { background: var(--rc, var(--accent)); }
+    .day .it { border-left: 2px solid var(--rc, var(--line)); padding-left: 5px; }
+    .day .debt { font-weight: 500; }
+    .goal { padding: 12px 0; border-top: 1px solid var(--line); }
+    .goal:first-of-type { border-top: 0; padding-top: 0; }
+    .goal-title { font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+    .rv { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .rv th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 4px 6px 4px 0; }
+    .rv th::first-letter { text-transform: uppercase; }
+    .rv td { padding: 6px 6px 6px 0; border-top: 1px solid var(--line); }
+    .rv .n { text-align: right; white-space: nowrap; }
+    .edit-row { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .edit-row:first-of-type { border-top: 0; }
+    .edit-row .line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .edit-row label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; }
+    input[type=text], input[type=number], input[type=date] { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); min-width: 0; }
+    input[type=text] { flex: 1 1 140px; }
+    input[type=number] { width: 68px; }
+    .dayp { position: relative; }
+    .dayp input { position: absolute; opacity: 0; }
+    .dayp span { display: inline-block; min-width: 30px; text-align: center; padding: 3px 5px; border-radius: 6px; font-size: 12px; background: var(--chip); color: var(--muted); cursor: pointer; }
+    .dayp input:checked + span { background: var(--accent); color: var(--accent-fg); }
+    .dayp input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .icon { padding: 3px 9px; font-size: 14px; color: var(--muted); }
+    #edit-bar { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 4; margin-top: 8px; box-shadow: 0 4px 18px rgba(0, 0, 0, .14); }
+    @media (min-width: 760px) { #edit-bar { bottom: 12px; } }
+    .invite { text-align: center; padding: 28px 16px; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
 </head>
 <body>
+  <header class="top">
+    <p class="brand">Mesocycle</p>
+    <nav id="tabs" role="tablist">
+      <button role="tab" data-tab="today"><b>◉</b><span data-t="today"></span></button>
+      <button role="tab" data-tab="week"><b>▦</b><span data-t="weekTab"></span></button>
+      <button role="tab" data-tab="goals"><b>◎</b><span data-t="goalsTab"></span></button>
+    </nav>
+    <div class="right">
+      <span class="muted" id="date" style="font-size:13px"></span>
+      <a id="guide" href="/huong-dan" style="font-size:13px;color:var(--accent)">?</a>
+      <button class="small" id="lang" title="Tiếng Việt / English"></button>
+    </div>
+  </header>
   <main>
-    <header>
-      <h1>Mesocycle</h1>
-      <div class="row">
-        <span class="muted" id="date"></span>
-        <a class="small" id="guide" href="/huong-dan" style="font-size:13px;color:var(--accent)">?</a>
-        <button class="small" id="lang" title="Tiếng Việt / English"></button>
-      </div>
-    </header>
-
-    <section class="card" id="account" style="padding:10px 16px">
-      <div class="row" style="justify-content:space-between">
-        <span class="hint" id="account-text" style="margin:0"></span>
-        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button></div>
-      </div>
-    </section>
+    <div id="p-today">
+    <section class="card caption" id="week-banner" hidden style="margin:0 0 14px"></section>
     <section class="card intro" id="intro"></section>
     <section class="card" id="setup" hidden>
       <h2 data-t="setupTitle"></h2>
@@ -101,7 +163,7 @@
       </div>
       <div class="hint" id="setup-status"></div>
     </section>
-    <section class="card" id="now-card"></section>
+    <section class="card now" id="now-card"></section>
     <section class="card" id="next-card"></section>
     <details class="card" id="tl-card" open>
       <summary data-t="timeline"></summary>
@@ -127,8 +189,6 @@
       <div id="answer"></div>
     </section>
 
-    <section class="card" id="week-card"></section>
-
     <details class="card">
       <summary data-t="feedback"></summary>
       <p class="hint" data-t="feedbackHint"></p>
@@ -152,6 +212,41 @@
       </div>
       <p class="hint" data-t="clockHint"></p>
     </details>
+
+    <section class="card" id="account" style="padding:10px 16px">
+      <div class="row" style="justify-content:space-between">
+        <span class="hint" id="account-text" style="margin:0"></span>
+        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button></div>
+      </div>
+    </section>
+    </div>
+
+    <div id="p-week" hidden>
+      <section class="card" id="review-card" hidden></section>
+      <section class="card"><div id="week-card"></div><div id="week-forecast"></div></section>
+      <section class="card" id="week-invite" hidden></section>
+      <div id="edit-week" hidden>
+        <details class="card"><summary data-t="editRoles"></summary><div id="ed-roles"></div><button class="small" data-add="roles" data-t="addRole" style="margin-top:8px"></button></details>
+        <details class="card"><summary data-t="editFixed"></summary><div id="ed-fixed"></div><button class="small" data-add="fixed" data-t="addFixed" style="margin-top:8px"></button></details>
+        <details class="card"><summary data-t="editTasks"></summary><div id="ed-tasks"></div><button class="small" data-add="tasks" data-t="addTask" style="margin-top:8px"></button></details>
+        <details class="card"><summary data-t="editTimes"></summary><div class="row" id="ed-times" style="margin-top:10px"></div><p class="hint" data-t="sleepNote"></p></details>
+      </div>
+    </div>
+
+    <div id="p-goals" hidden>
+      <section class="card" id="goals-card"></section>
+      <div id="edit-goals" hidden>
+        <details class="card"><summary data-t="editGoals"></summary><div id="ed-goals"></div><button class="small" data-add="goals" data-t="addGoal" style="margin-top:8px"></button></details>
+      </div>
+    </div>
+
+    <section class="card" id="edit-bar" hidden>
+      <div class="row">
+        <button class="primary" id="edit-save" data-t="saveEdits"></button>
+        <button id="edit-cancel" data-t="cancel"></button>
+        <span class="hint" id="edit-status" style="margin:0"></span>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -195,7 +290,24 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan stays on this browser.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', more: 'more',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan stays on this browser.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
+        weekTab: 'Week', goalsTab: 'Goals', role: 'Role', planned: 'Planned', actual: 'Actual',
+        reviewTitle: 'Week review', reviewBtn: 'Review this week', reviewLast: 'Last week', keepWeek: 'Keep the same week',
+        reviewLine: (d, n, h) => `${d} of ${n} blocks done. ${h}h of debt carried over.`,
+        newWeek: 'A new week started. Last week is saved.', seeReview: 'See review',
+        nextBtn: 'Plan next week', nextTitle: 'Proposed next week', hoursChange: 'Hours a week',
+        nextThinking: 'Muse Spark is planning from how this week really went...',
+        nextLine: (n) => `${n} new blocks. Debt comes along. Goals, fixed events, sleep and minimums stay as they are.`,
+        pendingNote: 'Next week is approved and starts on Monday.',
+        goalsInvite: 'Goals connect your week to what you are working toward. Set up your own week to add yours.',
+        weekInvite: 'This is the demo day. Set up your own week to review it and edit your roles, classes and tasks.',
+        noGoals: 'No goals yet.', noGoalRoles: 'Roles without a goal', goalHours: (d, t) => `This week: ${d}h of ${t}h`,
+        goalBehind: (d, e) => `Falling behind: ${d}h so far, about ${e}h by now would keep the pace.`,
+        daysLeft: (n) => `${n} days left`, deadlinePassed: 'deadline passed',
+        editRoles: 'Edit roles', editFixed: 'Edit fixed events', editTasks: 'Edit tasks', editTimes: 'Wake and sleep', editGoals: 'Edit goals',
+        addRole: '+ Add role', addFixed: '+ Add fixed event', addTask: '+ Add task', addGoal: '+ Add goal',
+        priority: 'Priority', targetH: 'Hours/week', floorH: 'Minimum', minutes: 'Min', rank: 'Block', rankExtra: 'Extra', deadline: 'Due', task: 'Task', measure: 'Measured by',
+        wake: 'Wake', sleepAt: 'Sleep', sleepNote: 'Only you can change this. The agent never moves your sleep.', remove: 'Remove', roleInUse: 'This role still has tasks or goals', noneYet: 'Nothing here yet.', saveEdits: 'Save changes',
         late: (m) => `You're about ${m} min behind on this. Want me to re-plan the rest of the day?`,
         lateReplan: 'Re-plan', lateStill: 'Still on it (+15 min)',
         lateText: (m, title) => `I'm ${m} minutes behind: "${title}" isn't finished yet. Re-plan the rest of today.`,
@@ -239,7 +351,24 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', more: 'nữa',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
+        weekTab: 'Tuần', goalsTab: 'Mục tiêu', role: 'Vai trò', planned: 'Kế hoạch', actual: 'Thực tế',
+        reviewTitle: 'Tổng kết tuần', reviewBtn: 'Tổng kết tuần này', reviewLast: 'Tuần trước', keepWeek: 'Giữ nguyên tuần cũ',
+        reviewLine: (d, n, h) => `Xong ${d} trên ${n} block. Chuyển sang ${h} giờ nợ.`,
+        newWeek: 'Tuần mới đã bắt đầu. Tuần trước đã được lưu.', seeReview: 'Xem tổng kết',
+        nextBtn: 'Lập tuần tới', nextTitle: 'Đề xuất tuần tới', hoursChange: 'Giờ mỗi tuần',
+        nextThinking: 'Muse Spark đang lập tuần tới theo những gì đã thật sự diễn ra...',
+        nextLine: (n) => `${n} block mới. Nợ được mang theo. Mục tiêu, lịch cố định, giờ ngủ và mức tối thiểu giữ nguyên.`,
+        pendingNote: 'Tuần tới đã được duyệt, bắt đầu từ thứ Hai.',
+        goalsInvite: 'Mục tiêu nối tuần của bạn với điều bạn đang theo đuổi. Lập tuần của bạn để thêm mục tiêu.',
+        weekInvite: 'Đây là ngày demo. Lập tuần của bạn để tổng kết và sửa vai trò, lịch học, việc cần làm.',
+        noGoals: 'Chưa có mục tiêu.', noGoalRoles: 'Vai trò chưa có mục tiêu', goalHours: (d, t) => `Tuần này: ${d} giờ trên ${t} giờ`,
+        goalBehind: (d, e) => `Đang tụt nhịp: mới ${d} giờ, tới giờ này cần khoảng ${e} giờ để giữ nhịp.`,
+        daysLeft: (n) => `còn ${n} ngày`, deadlinePassed: 'đã qua hạn',
+        editRoles: 'Sửa vai trò', editFixed: 'Sửa lịch cố định', editTasks: 'Sửa việc', editTimes: 'Giờ dậy và giờ ngủ', editGoals: 'Sửa mục tiêu',
+        addRole: '+ Thêm vai trò', addFixed: '+ Thêm lịch cố định', addTask: '+ Thêm việc', addGoal: '+ Thêm mục tiêu',
+        priority: 'Ưu tiên', targetH: 'Giờ/tuần', floorH: 'Tối thiểu', minutes: 'Phút', rank: 'Block', rankExtra: 'Phụ', deadline: 'Hạn', task: 'Việc', measure: 'Đo bằng',
+        wake: 'Dậy', sleepAt: 'Ngủ', sleepNote: 'Chỉ bạn mới đổi được mục này. Agent không bao giờ lùi giờ ngủ.', remove: 'Xoá', roleInUse: 'Vai trò này còn việc hoặc mục tiêu', noneYet: 'Chưa có gì ở đây.', saveEdits: 'Lưu thay đổi',
         late: (m) => `Bạn đang trễ khoảng ${m} phút ở việc này. Mình xếp lại phần còn lại của ngày nhé?`,
         lateReplan: 'Xếp lại', lateStill: 'Vẫn đang làm (+15 phút)',
         lateText: (m, title) => `Tôi đang trễ ${m} phút: "${title}" vẫn chưa xong. Xếp lại phần còn lại của hôm nay giúp tôi.`,
@@ -259,7 +388,7 @@
     const realNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
     const today = () => { const d = new Date(); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, weekday: d.getDay() }; };
     const saveTemplate = () => store.set('meso-template', JSON.stringify(template));
-    function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; }
+    function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; renderIntro(); }
 
     let stats;
     try { stats = JSON.parse(store.get('meso-stats')) || null; } catch { stats = null; }
@@ -349,7 +478,9 @@
     }
 
     function renderIntro() {
-      if (store.get('meso-intro') === 'hidden') { $('intro').hidden = true; return; }
+      // The intro explains the demo, so it stays out of the way once the week is yours.
+      $('intro').hidden = mode === 'real' || store.get('meso-intro') === 'hidden';
+      if ($('intro').hidden) return;
       $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="setup-open">${t('setupBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
       $('try').onclick = tryDemo;
       $('setup-open').onclick = openSetup;
@@ -367,6 +498,7 @@
     }
 
     function apply(data) {
+      if (data.template) { template = data.template; saveTemplate(); }
       if (data.state) { state = data.state; store.set('meso-state', JSON.stringify(state)); }
       if (data.view) view = data.view;
       render();
@@ -377,20 +509,20 @@
     let weekSeq = 0;
     async function loadWeek() {
       const seq = ++weekSeq;
-      const weekday = mode === 'real' ? new Date().getDay() : 5;
+      const weekday = realDay();
       try {
-        const f = await api('/api/week', { state, template: mode === 'real' ? template : null, weekday });
+        const f = await api('/api/week', { state, template: mode === 'real' ? template : null, weekday, date: state.date });
         if (seq !== weekSeq) return;
+        weekData = f;
         // Debt already, or about to be (does not fit today).
         const debtIds = new Set([...state.queue.filter((q) => q.status === 'skipped' || q.status === 'cut').map((q) => q.id), ...view.doesNotFit.map((x) => x.id)]);
-        const item = (i) => `<div class="it ${debtIds.has(i.id) ? 'debt' : ''}">${debtIds.has(i.id) ? '↩ ' : ''}${esc(i.title)}</div>`;
+        const item = (i) => `<div class="it ${debtIds.has(i.id) ? 'debt' : ''}" style="${rcStyle(i.roleId)}">${debtIds.has(i.id) ? '↩ ' : ''}${esc(i.title)}</div>`;
         const html = f.days.length ? `<p class="hint" style="margin-top:14px"><b>${t('rest')}</b><br>${t('restHint')}</p><div class="days">${f.days.map((d) => `
-          <div class="day"><b>${t('days')[d.weekday]} · ${(d.items.reduce((s, i) => s + i.minutes, 0) / 60).toFixed(1)}h</b>${d.items.slice(0, 4).map(item).join('')}${d.items.length > 4 ? `<div class="it muted">+${d.items.length - 4} ${t('more')}</div>` : ''}</div>`).join('')}</div>
+          <div class="day"><b>${t('days')[d.weekday]} · ${(d.items.reduce((s, i) => s + i.minutes, 0) / 60).toFixed(1)}h</b>${d.items.slice(0, 4).map(item).join('')}${d.items.length > 4 ? `<div class="it muted">+${d.items.length - 4} ${t('moreN')}</div>` : ''}</div>`).join('')}</div>
           ${f.left.length ? `<p class="hint">${t('leftOver')}: ${f.left.map((i) => esc(i.title)).join(', ')}</p>` : ''}` : '';
-        let box = $('week-forecast');
-        if (!box) { $('week-card').insertAdjacentHTML('beforeend', '<div id="week-forecast"></div>'); box = $('week-forecast'); }
-        box.innerHTML = html;
+        $('week-forecast').innerHTML = html;
       } catch { /* forecast is optional */ }
+      renderExtras();
     }
 
     async function resetDay(time = '07:00') {
@@ -433,7 +565,7 @@
       for (let m = from; m <= sleep; m += 60) tl.insertAdjacentHTML('beforeend', `<div class="hr" style="top:${y(m)}px">${String(m / 60).padStart(2, '0')}:00</div>`);
       const blocks = [
         ...view.fixed.map((x, i) => ({ key: 'f' + i + x.title, title: x.title, start: toMin(x.start), end: toMin(x.end), fixed: true })),
-        ...view.queue.map((q) => ({ key: q.id, title: q.title, start: toMin(q.start), end: toMin(q.end) })),
+        ...view.queue.map((q) => ({ key: q.id, title: q.title, role: q.role, start: toMin(q.start), end: toMin(q.end) })),
       ].filter((b) => b.end > from);
       const seen = new Set();
       for (const b of blocks) {
@@ -441,6 +573,7 @@
         let el = tl.querySelector(`[data-k="${CSS.escape(b.key)}"]`);
         if (!el) { el = document.createElement('div'); el.dataset.k = b.key; el.style.top = `${y(b.start)}px`; tl.appendChild(el); }
         el.className = 'blk' + (b.fixed ? ' fixed' : '');
+        if (b.role) el.style.setProperty('--rc', `var(--r${roleIdx(b.role)})`);
         el.textContent = `${String(Math.floor(b.start / 60)).padStart(2, '0')}:${String(b.start % 60).padStart(2, '0')} ${b.title}`;
         requestAnimationFrame(() => { el.style.top = `${y(Math.max(b.start, from))}px`; el.style.height = `${Math.max(16, (b.end - Math.max(b.start, from)) * PX - 2)}px`; });
       }
@@ -460,11 +593,12 @@
       const [now, ...next] = view.queue;
 
       const banner = lateBanner(now);
+      $('now-card').style.cssText = now ? rcStyle(now.role) : '';
       $('now-card').innerHTML = now ? `
         <h2>${t('now')}</h2>${banner}
         <div class="now-title">${esc(now.title)}</div>
         <div class="row muted" style="margin-bottom:12px">
-          <span>${now.start} - ${now.end}</span><span class="chip">${esc(roleName(now.role))}</span>
+          <span>${now.start} - ${now.end}</span><span class="chip role">${esc(roleName(now.role))}</span>
         </div>
         <div class="row">
           <button class="primary" data-act="done">${t('done')}</button>
@@ -482,7 +616,7 @@
 
       const misfit = view.doesNotFit.length ? `<p class="warn" style="margin:10px 0 0">${t('doesNotFit')}: ${view.doesNotFit.map((x) => esc(x.title)).join(', ')}. ${t('doesNotFitTail')}</p>` : '';
       $('next-card').innerHTML = `<h2>${t('next')}</h2>${next.slice(0, 3).map((n) => `
-        <div class="next"><span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || `<p class="muted" style="margin:0">${t('nothingElse')}</p>`}
+        <div class="next"><span><span class="dot" style="${rcStyle(n.role)}"></span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || `<p class="muted" style="margin:0">${t('nothingElse')}</p>`}
         ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">${t('fixed')}: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
 
       renderTimeline();
@@ -490,9 +624,28 @@
       $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
         const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
         const pct = Math.min(100, Math.round(have / r.floorMin * 100));
-        return `<div class="floor"><span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h ${t('of')} ${r.floorMin / 60}h ${t('floor')}${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h ${t('debt')}` : ''}</span>
+        return `<div class="floor" style="${rcStyle(r.id)}"><span><span class="dot"></span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h ${t('of')} ${r.floorMin / 60}h ${t('floor')}${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h ${t('debt')}` : ''}</span>
           <div class="bar ${have < r.floorMin ? 'under' : ''}" style="grid-column:1/3"><i style="width:${pct}%"></i></div></div>`;
       }).join('') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${Math.round(d.shortMin / 60)}h`}</p>`).join('');
+    }
+
+    function recordDone(id, roleId, minutes) {
+      const task = template.tasks.find((x) => x.id === id);
+      if (task) { if (task.debt) count('repaid', minutes); task.status = 'done'; }
+      count('done', minutes);
+      template.done = template.done || {};
+      template.done[roleId] = (template.done[roleId] || 0) + minutes;
+      template.actuals = state.actuals;
+      saveTemplate();
+    }
+    function syncAgent(before) {
+      if (mode !== 'real' || !template) return;
+      const was = new Map(before.queue.map((q) => [q.id, q.status]));
+      for (const q of state.queue) {
+        if (was.get(q.id) === q.status) continue;
+        if (q.status === 'done') recordDone(q.id, q.roleId, (state.actuals || []).at(-1)?.actual || q.minutes);
+        if (q.status === 'skipped' || q.status === 'cut') { const task = template.tasks.find((x) => x.id === q.id); if (task) { task.debt = true; saveTemplate(); } }
+      }
     }
 
     async function act(kind, item) {
@@ -510,15 +663,241 @@
       apply(await api('/api/tool', { state, name: 'update_item', args }));
       if (mode === 'real' && template && kind === 'skip') { const task = template.tasks.find((x) => x.id === item.id); if (task) { task.debt = true; saveTemplate(); } }
       if (mode === 'real' && template && kind === 'done') {
-        const task = template.tasks.find((x) => x.id === item.id);
-        if (task) { if (task.debt) count('repaid', args.minutes); task.status = 'done'; }
-        count('done', args.minutes);
-        template.done = template.done || {};
-        template.done[item.role] = (template.done[item.role] || 0) + args.minutes;
-        template.actuals = state.actuals;
-        saveTemplate();
+        recordDone(item.id, item.role, args.minutes);
       }
     }
+
+
+    // Tabs: Today, Week, Goals. The chosen tab is remembered on this browser.
+    let tab = store.get('meso-tab') || 'today';
+    function showTab(name) {
+      tab = name;
+      store.set('meso-tab', name);
+      for (const p of ['today', 'week', 'goals']) $(`p-${p}`).hidden = p !== name;
+      document.querySelectorAll('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.tab === name); b.setAttribute('aria-selected', b.dataset.tab === name); });
+      window.scrollTo({ top: 0 });
+    }
+    document.querySelectorAll('#tabs button').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
+
+    // Colors: each role keeps the color of its place in the role list.
+    const roleIdx = (id) => { const list = template && mode === 'real' ? template.roles : view ? view.roles : []; return Math.max(0, list.findIndex((r) => r.id === id)) % 8; };
+    const rcStyle = (id) => `--rc:var(--r${roleIdx(id)})`;
+    const hrs = (m) => (Math.round(m / 6) / 10).toString();
+    const realDay = () => (mode === 'real' ? new Date().getDay() : 5);
+
+    let weekData = null, reviewOpen = false, nextPlan = null, draft = null;
+
+    function renderExtras() {
+      renderBanner();
+      renderReview();
+      renderGoals();
+      if (!draft) renderEditors();
+    }
+
+    const closedWeek = () => (mode === 'real' && template?.history?.length ? template.history.at(-1) : null);
+    const unseenWeek = () => { const c = closedWeek(); return c && template.reviewedWeek !== c.weekStart ? c : null; };
+
+    function renderBanner() {
+      const box = $('week-banner');
+      box.hidden = !unseenWeek();
+      if (box.hidden) return;
+      box.innerHTML = `<div class="row" style="justify-content:space-between"><span>${t('newWeek')}</span><button class="primary small" id="see-review">${t('seeReview')}</button></div>`;
+      $('see-review').onclick = () => showTab('week');
+    }
+
+    function reviewHtml(r) {
+      return `<table class="rv"><tr><th>${t('role')}</th><th class="n">${t('planned')}</th><th class="n">${t('actual')}</th><th class="n">${t('floor')}</th></tr>
+        ${r.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}</td><td class="n">${hrs(x.targetMin)}h</td><td class="n">${hrs(x.doneMin)}h</td><td class="n ${x.floorKept ? 'ok' : 'warn'}">${x.floorMin ? (x.floorKept ? '✓' : '✗') + ' ' + hrs(x.floorMin) + 'h' : ''}</td></tr>`).join('')}
+      </table><p class="hint">${t('reviewLine')(r.tasksDone, r.tasksTotal, hrs(r.debtMin))}</p>`;
+    }
+
+    function renderReview() {
+      const box = $('review-card');
+      box.hidden = mode !== 'real' || !template;
+      if (box.hidden) return;
+      const closed = unseenWeek();
+      const r = closed || (reviewOpen && weekData?.review) || null;
+      if (!r) {
+        box.innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${t('reviewTitle')}</h2><button id="review-open">${t('reviewBtn')}</button></div>${template.pending ? `<p class="hint">${t('pendingNote')}</p>` : ''}`;
+        $('review-open').onclick = () => { reviewOpen = true; renderReview(); };
+        return;
+      }
+      const plan = nextPlan ? `<h2 style="margin-top:16px">${t('nextTitle')}</h2>
+        <table class="rv"><tr><th>${t('role')}</th><th class="n">${t('hoursChange')}</th></tr>
+        ${nextPlan.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}${x.why ? `<div class="hint" style="margin:2px 0 0">${esc(x.why)}</div>` : ''}</td><td class="n">${hrs(x.fromMin)}h → <b>${hrs(x.targetMin)}h</b></td></tr>`).join('')}</table>
+        <p class="hint">${t('nextLine')(nextPlan.tasks.length)}</p>
+        <div class="row"><button class="primary" id="next-ok">${t('approve')}</button><button id="next-no">${t('cancel')}</button></div>` : '';
+      box.innerHTML = `<h2>${closed ? t('reviewLast') : t('reviewTitle')}</h2>${reviewHtml(r)}
+        ${nextPlan ? plan : `<div class="row"><button class="primary" id="next-go">${t('nextBtn')}</button>${closed ? `<button id="review-skip">${t('keepWeek')}</button>` : `<button class="small" id="review-close">${t('hideIntro')}</button>`}</div>`}
+        <div class="hint" id="next-status"></div>`;
+      if (nextPlan) {
+        $('next-ok').onclick = () => approveNext(closed);
+        $('next-no').onclick = () => { nextPlan = null; renderReview(); };
+        return;
+      }
+      $('next-go').onclick = () => planNext(r);
+      if (closed) $('review-skip').onclick = () => { template.reviewedWeek = closed.weekStart; saveTemplate(); scheduleSave(); renderExtras(); };
+      else $('review-close').onclick = () => { reviewOpen = false; renderReview(); };
+    }
+
+    async function planNext(review) {
+      $('next-go').disabled = true;
+      $('next-status').textContent = t('nextThinking');
+      try {
+        const data = await api('/api/setup', { previous: template, review, lang });
+        nextPlan = data.next;
+        renderReview();
+      } catch (e) {
+        $('next-status').textContent = e.message;
+        $('next-go').disabled = false;
+      }
+    }
+
+    async function approveNext(closed) {
+      if (closed) {
+        const data = await api('/api/edit', { template, next: nextPlan, state, weekday: realDay(), lang });
+        data.template.reviewedWeek = closed.weekStart;
+        nextPlan = null;
+        apply(data);
+      } else {
+        // The week is still running, so the new plan waits for Monday.
+        template.pending = nextPlan;
+        nextPlan = null; reviewOpen = false;
+        saveTemplate(); scheduleSave(); renderExtras();
+      }
+    }
+
+    function renderGoals() {
+      const box = $('goals-card');
+      if (mode !== 'real' || !template) {
+        box.innerHTML = `<div class="invite"><h2>${t('goalsTab')}</h2><p>${t('goalsInvite')}</p><button class="primary" id="invite-go">${t('setupBtn')}</button></div>`;
+        $('invite-go').onclick = openSetup;
+        return;
+      }
+      const goals = template.goals || [];
+      const pace = new Map((weekData?.goals || []).map((g) => [g.id, g]));
+      const used = new Set(goals.map((g) => g.roleId));
+      const free = template.roles.filter((r) => !used.has(r.id)).map((r) => r.name);
+      box.innerHTML = `<h2>${t('goalsTab')}</h2>${goals.map((g) => {
+        const p = pace.get(g.id);
+        const role = template.roles.find((r) => r.id === g.roleId);
+        const done = template.done?.[g.roleId] || 0;
+        const target = role?.targetMin || 0;
+        const left = p?.daysLeft;
+        return `<div class="goal" style="${rcStyle(g.roleId)}">
+          <div class="goal-title">${esc(g.title)}</div>
+          <div class="row" style="margin:4px 0 8px"><span class="chip role">${esc(role?.name || '')}</span>${g.measure ? `<span class="hint" style="margin:0">${esc(g.measure)}</span>` : ''}${left != null ? `<span class="hint" style="margin:0">${left >= 0 ? t('daysLeft')(left) : t('deadlinePassed')}</span>` : ''}</div>
+          <div class="hint" style="margin:0">${t('goalHours')(hrs(done), hrs(target))}</div>
+          <div class="bar"><i style="width:${target ? Math.min(100, Math.round((done / target) * 100)) : 0}%"></i></div>
+          ${p?.behind ? `<p class="warn" style="margin:8px 0 0;font-size:14px">${t('goalBehind')(hrs(p.doneMin), hrs(p.expectedMin))}</p>` : ''}
+        </div>`;
+      }).join('') || `<p class="muted" style="margin:0">${t('noGoals')}</p>`}
+      ${free.length && goals.length ? `<p class="hint">${t('noGoalRoles')}: ${free.map(esc).join(', ')}</p>` : ''}`;
+    }
+
+    // Hand edits work on a draft copy. Typing only changes the draft and never
+    // redraws the row, so Vietnamese input methods are not interrupted.
+    const roleOptions = (d, sel) => d.roles.map((r) => `<option value="${esc(r.id)}" ${r.id === sel ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
+    const field = (c, id, f, value, attrs = '') => `<input ${attrs} data-c="${c}" data-i="${esc(id)}" data-f="${f}" value="${esc(value ?? '')}">`;
+
+    function renderEditors() {
+      const real = mode === 'real' && !!template;
+      $('edit-week').hidden = !real;
+      $('edit-goals').hidden = !real;
+      $('week-invite').hidden = real;
+      if (!real) {
+        $('week-invite').innerHTML = `<div class="invite"><p style="margin-top:0">${t('weekInvite')}</p><button class="primary" id="week-invite-go">${t('setupBtn')}</button></div>`;
+        $('week-invite-go').onclick = openSetup;
+        return;
+      }
+      const d = draft || template;
+      const used = (id) => d.tasks.some((x) => x.roleId === id && x.status === 'todo') || (d.goals || []).some((g) => g.roleId === id);
+      const del = (c, id, off) => `<button class="small icon" data-del="${c}" data-i="${esc(id)}" aria-label="${t('remove')}" title="${off ? t('roleInUse') : t('remove')}" ${off ? 'disabled' : ''}>✕</button>`;
+
+      $('ed-roles').innerHTML = d.roles.map((r) => `<div class="edit-row"><div class="line"><span class="dot" style="${rcStyle(r.id)}"></span>${field('roles', r.id, 'name', r.name, `type="text" aria-label="${t('role')}"`)}${del('roles', r.id, used(r.id))}</div>
+        <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label></div></div>`).join('');
+
+      const order = [1, 2, 3, 4, 5, 6, 0];
+      $('ed-fixed').innerHTML = d.fixed.map((f) => `<div class="edit-row"><div class="line">${field('fixed', f.id, 'title', f.title, `type="text" aria-label="${t('fixed')}"`)}${del('fixed', f.id)}</div>
+        <div class="line">${field('fixed', f.id, 'start', f.start, 'type="time"')} ${field('fixed', f.id, 'end', f.end, 'type="time"')}</div>
+        <div class="line">${order.map((wd) => `<label class="dayp"><input type="checkbox" data-c="fixed" data-i="${esc(f.id)}" data-day="${wd}" ${f.days.includes(wd) ? 'checked' : ''}><span>${t('days')[wd]}</span></label>`).join('')}</div></div>`).join('') || `<p class="hint">${t('noneYet')}</p>`;
+
+      $('ed-tasks').innerHTML = d.tasks.filter((x) => x.status === 'todo').map((x) => `<div class="edit-row"><div class="line">${field('tasks', x.id, 'title', x.title, `type="text" aria-label="${t('task')}"`)}${del('tasks', x.id)}</div>
+        <div class="line"><select data-c="tasks" data-i="${esc(x.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, x.roleId)}</select>
+        <label>${t('minutes')} ${field('tasks', x.id, 'minutes', x.minutes, 'type="number" min="15" max="180" step="5"')}</label>
+        <select data-c="tasks" data-i="${esc(x.id)}" data-f="rank" aria-label="${t('rank')}">${['1', '2', '3', 'extra'].map((v) => `<option value="${v}" ${String(x.rank) === v ? 'selected' : ''}>${v === 'extra' ? t('rankExtra') : `${t('rank')} ${v}`}</option>`).join('')}</select>
+        <label>${t('deadline')} ${field('tasks', x.id, 'deadline', x.deadline, 'type="date"')}</label>${x.debt ? `<span class="chip">${t('debt')}</span>` : ''}</div></div>`).join('') || `<p class="hint">${t('noneYet')}</p>`;
+
+      $('ed-times').innerHTML = `<label>${t('wake')} ${field('root', '', 'wake', d.wake, 'type="time"')}</label> <label>${t('sleepAt')} ${field('root', '', 'sleep', d.sleep, 'type="time"')}</label>`;
+
+      $('ed-goals').innerHTML = (d.goals || []).map((g) => `<div class="edit-row"><div class="line">${field('goals', g.id, 'title', g.title, `type="text" aria-label="${t('goalsTab')}"`)}${del('goals', g.id)}</div>
+        <div class="line"><select data-c="goals" data-i="${esc(g.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, g.roleId)}</select>${field('goals', g.id, 'measure', g.measure, `type="text" placeholder="${t('measure')}" aria-label="${t('measure')}"`)}<label>${t('deadline')} ${field('goals', g.id, 'deadline', g.deadline, 'type="date"')}</label></div></div>`).join('') || `<p class="hint">${t('noGoals')}</p>`;
+    }
+
+    function startDraft() {
+      if (!draft) draft = JSON.parse(JSON.stringify(template));
+      $('edit-bar').hidden = false;
+      $('edit-status').textContent = '';
+    }
+
+    function onEditInput(e) {
+      const el = e.target;
+      const { c, i, f, day } = el.dataset;
+      if (!c) return;
+      startDraft();
+      const item = c === 'root' ? draft : draft[c].find((x) => x.id === i);
+      if (day !== undefined) {
+        const wd = Number(day);
+        item.days = el.checked ? [...item.days, wd] : item.days.filter((x) => x !== wd);
+      } else if (f === 'targetMin' || f === 'floorMin') item[f] = Math.round(Number(el.value) * 60);
+      else if (f === 'minutes' || f === 'priority') item[f] = Number(el.value);
+      else if (f === 'rank') item[f] = el.value === 'extra' ? 'extra' : Number(el.value);
+      else if (f === 'deadline') item[f] = el.value || null;
+      else item[f] = el.value;
+    }
+
+    function onEditClick(e) {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const uid = `e${Date.now().toString(36)}`;
+      if (btn.dataset.del) {
+        startDraft();
+        draft[btn.dataset.del] = draft[btn.dataset.del].filter((x) => x.id !== btn.dataset.i);
+        renderEditors();
+      } else if (btn.dataset.add) {
+        startDraft();
+        const c = btn.dataset.add;
+        const role = draft.roles[0].id;
+        if (c === 'roles') draft.roles.push({ id: uid, name: '', priority: draft.roles.length + 1, targetMin: 120, floorMin: 0 });
+        if (c === 'fixed') draft.fixed.push({ id: uid, title: '', days: [realDay()], start: '08:00', end: '09:00' });
+        if (c === 'tasks') draft.tasks.push({ id: uid, title: '', roleId: role, minutes: 60, rank: 2, deadline: null, status: 'todo' });
+        if (c === 'goals') (draft.goals = draft.goals || []).push({ id: uid, title: '', roleId: role, measure: '', deadline: null });
+        renderEditors();
+      }
+    }
+    for (const box of ['edit-week', 'edit-goals']) {
+      $(box).addEventListener('input', onEditInput);
+      $(box).addEventListener('change', onEditInput);
+      $(box).addEventListener('click', onEditClick);
+    }
+
+    $('edit-save').onclick = async () => {
+      $('edit-save').disabled = true;
+      $('edit-status').textContent = t('saving');
+      try {
+        const data = await api('/api/edit', { template: draft, state, weekday: realDay(), lang });
+        template = draft; draft = null;
+        saveTemplate();
+        $('edit-bar').hidden = true;
+        $('edit-status').textContent = '';
+        apply(data);
+      } catch (e) {
+        $('edit-status').textContent = e.message;
+      } finally {
+        $('edit-save').disabled = false;
+      }
+    };
+    $('edit-cancel').onclick = () => { draft = null; $('edit-bar').hidden = true; renderEditors(); };
 
     // Voice check-in: record, convert to 16 kHz mono WAV (what the
     // transcription API accepts), transcribe, then send the text to the agent.
@@ -622,7 +1001,9 @@
           }
         }
         if (!done || !done.ok) throw new Error(done?.error || 'No answer');
+        const before = state;
         apply(done);
+        syncAgent(before);
         count('replan');
         $('say').value = '';
         showAnswer(done);
@@ -671,13 +1052,14 @@
     }
 
     function openSetup() {
+      showTab('today');
       $('setup').hidden = false;
       $('setup').scrollIntoView({ behavior: 'smooth', block: 'start' });
       $('setup-text').focus();
     }
     $('setup-cancel').onclick = () => { $('setup').hidden = true; };
     $('rebuild').onclick = openSetup;
-    $('to-demo').onclick = async () => { setMode('demo'); await resetDay('07:00'); };
+    $('to-demo').onclick = async () => { draft = null; $('edit-bar').hidden = true; setMode('demo'); await resetDay('07:00'); };
     $('setup-go').onclick = async () => {
       const text = $('setup-text').value.trim();
       if (!text && !setupImage) return;
@@ -685,7 +1067,7 @@
       $('setup-status').textContent = t('building');
       try {
         const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang });
-        template = data.template; saveTemplate();
+        data.template.history = template?.history || [];
         setMode('real');
         if (!sid) $('setup-status').textContent = t('signedOut');
         $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
@@ -703,7 +1085,7 @@
     async function tick() {
       if (mode !== 'real' || !state || $('send').disabled) return;
       const d = today();
-      if (state.date !== d.date && template) { apply(await api('/api/day', { template, ...d, now: realNow() })); return; }
+      if (state.date !== d.date && template) { apply(await api('/api/day', { template, state, ...d, now: realNow() })); return; }
       if (realNow() > state.now) { state.now = realNow(); await refresh(); }
     }
     setInterval(tick, 60000);
@@ -732,6 +1114,7 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
     (async () => {
+      showTab(tab);
       applyLang();
       await initAccount();
       try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }

@@ -19,6 +19,9 @@ I built a planner with an automatic "reschedule" button before this hackathon, a
 3. **Say what changed.** "I slept through the afternoon, meeting at 7pm." The agent re-plans and asks before cutting anything, with a default and an alternative.
 4. **It notices when you fall behind.** If the current block runs over, Mesocycle offers to re-plan before you have to ask.
 5. **See the week.** Today's debt is shown landing on the days that still have room, next to each role's weekly minimum.
+6. **Connect it to your goals.** Goals (a GPA, a revenue target, an exam) link to the roles that serve them, show the hours they got this week, and warn when they fall behind pace.
+7. **Close the loop every week.** A new week closes the old one automatically: plan against reality by role, debt carried over. Muse Spark then proposes next week's hours from what really happened, with a reason for each change. Nothing applies until you approve it, and code rejects any proposal that drops a floor or asks for more hours than the week can hold. Goals, fixed events and sleep are out of its reach.
+8. **Edit anything directly.** Roles, fixed events, tasks, goals, wake and sleep. Editing mid-day keeps finished work, debt and what the agent added.
 
 Or press **Try the demo** to replay the author's real broken Friday before midterms.
 

@@ -20,3 +20,8 @@ namespace_id = "1001"
   [ratelimits.simple]
   limit = 12
   period = 60
+
+# Run in the US. Meta's API lists no models for requests leaving Hong Kong,
+# which is where Cloudflare sends traffic from Vietnam (model_not_found).
+[placement]
+region = "aws:us-east-1"

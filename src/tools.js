@@ -159,7 +159,9 @@ export function runTool(state, name, args) {
       if (!HHMM.test(start || '')) return { ...reject('start must be HH:MM (24h).'), state };
       if (!intIn(minutes, 5, 600)) return { ...reject('minutes must be an integer from 5 to 600.'), state };
       if (toMin(start) + minutes <= state.now) return { ...reject(`That ends before now (${toHHMM(state.now)}).`), state };
-      const next = applyEvent(state, { type: 'interrupt', start: toMin(start), minutes, title: title.trim(), newId: `fix-${state.fixed.length + 1}` });
+      let n = state.fixed.length + 1;
+      while (state.fixed.some((f) => f.id === `fix-${n}`)) n++;
+      const next = applyEvent(state, { type: 'interrupt', start: toMin(start), minutes, title: title.trim(), newId: `fix-${n}` });
       return done(next);
     }
 
@@ -188,7 +190,10 @@ export function runTool(state, name, args) {
       if (!state.roles.some((r) => r.id === role)) return { ...reject(`Unknown role "${role}". Roles: ${state.roles.map((r) => r.id).join(', ')}.`), state };
       if (!intIn(minutes, 5, 300)) return { ...reject('minutes must be an integer from 5 to 300.'), state };
       if (!['1', '2', '3', 'extra'].includes(String(rank))) return { ...reject('rank must be 1, 2, 3 or extra.'), state };
-      const item = { id: `q-${state.queue.length + 1}`, title: title.trim(), roleId: role, minutes, rank: rank === 'extra' ? 'extra' : Number(rank) };
+      // Edits can shorten the queue, so its length alone is not a safe id.
+      let n = state.queue.length + 1;
+      while (state.queue.some((i) => i.id === `q-${n}`)) n++;
+      const item = { id: `q-${n}`, title: title.trim(), roleId: role, minutes, rank: rank === 'extra' ? 'extra' : Number(rank) };
       return done(applyEvent(state, { type: 'add', item }));
     }
 

@@ -7,7 +7,7 @@ import { runAgent } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
 import { demoState } from './demo-state.js';
-import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek } from './setup.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, rollover, rebaseDay, adoptNext, mondayOf, goalPace, weekReview, checkTemplate, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from './setup.js';
 import { replan, toHHMM } from './planner.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData } from './auth.js';
 
@@ -124,6 +124,28 @@ export default {
       // Set up my week: one description (and maybe a timetable photo) in,
       // a checked weekly template and today's plan out. Invalid arguments go
       // back to the model with the reasons, at most 3 tries.
+      // Plan next week from how the last one went. This only proposes: the
+      // browser shows old and new hours, and nothing applies until approved.
+      if (url.pathname === '/api/setup' && body?.previous) {
+        const t = body.previous;
+        const review = body.review || weekReview(t);
+        const messages = [{ role: 'system', content: NEXT_WEEK_PROMPT }, { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\nLast week:\n${nextWeekBrief(t, review)}\n\n${String(body.text || '').slice(0, 2000)}` }];
+        const steps = [];
+        let modelMs = 0;
+        for (let i = 0; i < 3; i++) {
+          const out = await chat(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000 }, 'meta');
+          modelMs += out.ms;
+          const call = out.toolCalls.find((c) => c.name === 'plan_next_week');
+          if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call plan_next_week now.' }); steps.push({ ok: false, error: 'no plan_next_week call' }); continue; }
+          const v = validateNext(t, call.args);
+          steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
+          if (!v.errors) return json({ ok: true, next: v.next, steps, modelMs });
+          messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
+          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.errors }) });
+        }
+        return json({ ok: false, error: 'Could not plan next week, try again.', steps, modelMs }, 422);
+      }
+
       if (url.pathname === '/api/setup' && body) {
         const text = String(body.text || '').trim().slice(0, 4000);
         if (!text && !body.image) return json({ ok: false, error: 'Describe your week first' }, 400);
@@ -143,6 +165,7 @@ export default {
           const v = validateWeek(call.args);
           steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
           if (!v.errors) {
+            v.template.weekStart = mondayOf(body.date);
             const state = buildDay(v.template, { date: body.date, weekday: body.weekday, now: body.now });
             return json({ ok: true, template: v.template, state, view: view(state), steps, modelMs });
           }
@@ -154,8 +177,17 @@ export default {
 
       // Today's plan from a saved weekly template (a new day, or after edits).
       if (url.pathname === '/api/day' && body) {
-        const state = buildDay(body.template, { date: body.date, weekday: body.weekday, now: body.now });
-        return json({ ok: true, state, view: view(state) });
+        const out = rollover(body.template, body.state || null, { date: body.date, weekday: body.weekday, now: body.now });
+        return json({ ok: true, ...out, view: view(out.state) });
+      }
+
+      // The user edited the plan by hand: check it, then update today in place.
+      if (url.pathname === '/api/edit' && body) {
+        const template = body.next ? adoptNext(body.template, body.next) : body.template;
+        const errors = checkTemplate(template, body.lang);
+        if (errors.length) return json({ ok: false, error: errors[0], errors }, 422);
+        const state = rebaseDay(template, body.state, { weekday: body.weekday });
+        return json({ ok: true, template, state, view: view(state) });
       }
 
       // Rest-of-week forecast: where today's debt and open work would land.
@@ -172,7 +204,11 @@ export default {
           sleep: toHHMM(s.settings.sleep),
         };
         const done = s.queue.filter((q) => q.status === 'done').map((q) => q.id);
-        return json({ ok: true, ...forecastWeek(template, { weekday: body.weekday, exclude: [...placed, ...done] }) });
+        return json({
+          ok: true,
+          ...forecastWeek(template, { weekday: body.weekday, exclude: [...placed, ...done] }),
+          ...(body.template ? { review: weekReview(body.template), goals: goalPace(body.template, { weekday: body.weekday, date: body.date }) } : {}),
+        });
       }
 
       // Accounts: Google sign-in, then one saved plan per person.
