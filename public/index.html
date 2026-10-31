@@ -62,6 +62,19 @@
     </header>
 
     <section class="card intro" id="intro"></section>
+    <section class="card" id="setup" hidden>
+      <h2 data-t="setupTitle"></h2>
+      <p class="hint" data-t="setupHint" style="margin-top:0"></p>
+      <textarea id="setup-text" style="min-height:120px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="setup-go" data-t="build"></button>
+        <button id="setup-mic"></button>
+        <button id="setup-photo" data-t="photo"></button>
+        <span class="chip" id="setup-photo-chip" hidden></span>
+        <button class="small" id="setup-cancel" data-t="cancel"></button>
+      </div>
+      <div class="hint" id="setup-status"></div>
+    </section>
     <section class="card" id="now-card"></section>
     <section class="card" id="next-card"></section>
 
@@ -96,7 +109,12 @@
       </div>
     </details>
 
-    <details class="card">
+    <div class="row" id="real-row" hidden style="margin-bottom:14px">
+      <button class="small" id="rebuild" data-t="rebuild"></button>
+      <button class="small" id="to-demo" data-t="toDemo"></button>
+    </div>
+
+    <details class="card" id="demo-box">
       <summary data-t="demoControls"></summary>
       <div class="row" style="margin-top:10px">
         <label><span data-t="clock"></span> <input type="time" id="clock" step="300"></label>
@@ -116,7 +134,11 @@
             <li>When something changes, <b>say it or type it</b>. The AI agent re-plans and asks before cutting anything.</li>
             <li>Sleep and your weekly minimum for family, training and work are protected.</li>
           </ul>`,
-        tryDemo: '▶ Try the demo: a broken afternoon', hideIntro: 'Hide',
+        tryDemo: '▶ Try the demo: a broken afternoon', hideIntro: 'Hide', setupBtn: '✨ Set up my week',
+        setupTitle: 'Set up my week', build: 'Build my week', cancel: 'Cancel', rebuild: 'Rebuild my week', toDemo: 'Back to the demo day',
+        setupHint: 'Describe your week in your own words, or say it. Add a photo of your timetable if you have one. Mesocycle builds your roles, weekly minimums, fixed classes and work blocks.',
+        setupPlaceholder: 'e.g. First-year student. Study 20 hours a week (never under 12), my part-time job 8 hours, gym 4 times, call home twice. Calculus Tue 6:45 to 10:10, Algebra Wed 6:00 to 10:10. Midterms on Nov 8. Up at 6:30, sleep at 11.',
+        building: 'Muse Spark is building your week...', photoAdded: 'photo added', today: 'Today',
         now: 'Now', next: 'Next', nothingLeft: 'Nothing left that fits today.',
         debtNote: 'Unfinished work is kept as debt and comes back when there is real free time.',
         done: 'Done', more: 'Need 15 more min', skip: "Can't do it",
@@ -153,7 +175,11 @@
             <li>Có gì thay đổi thì <b>nói hoặc gõ</b>. Agent AI xếp lại, và luôn hỏi trước khi cắt việc.</li>
             <li>Giờ ngủ và mức tối thiểu mỗi tuần cho gia đình, tập luyện, công việc luôn được giữ.</li>
           </ul>`,
-        tryDemo: '▶ Thử demo: một buổi chiều bị vỡ', hideIntro: 'Ẩn',
+        tryDemo: '▶ Thử demo: một buổi chiều bị vỡ', hideIntro: 'Ẩn', setupBtn: '✨ Lập tuần của tôi',
+        setupTitle: 'Lập tuần của tôi', build: 'Lập tuần', cancel: 'Huỷ', rebuild: 'Lập lại tuần', toDemo: 'Quay lại ngày demo',
+        setupHint: 'Kể về tuần của bạn bằng lời của bạn, gõ hoặc nói. Có ảnh thời khoá biểu thì thêm vào. Mesocycle sẽ dựng vai trò, mức tối thiểu mỗi tuần, lịch học cố định và các block việc.',
+        setupPlaceholder: 'Ví dụ: Sinh viên năm nhất. Học 20 tiếng một tuần (không dưới 12), làm thêm 8 tiếng, gym 4 buổi, gọi về nhà 2 lần. Thứ 3 học Giải tích 6h45 đến 10h10, thứ 4 Đại số 6h đến 10h10. Thi giữa kỳ 8/11. Dậy 6h30, ngủ 23h.',
+        building: 'Muse Spark đang dựng tuần của bạn...', photoAdded: 'đã thêm ảnh', today: 'Hôm nay',
         now: 'Bây giờ', next: 'Tiếp theo', nothingLeft: 'Hôm nay không còn việc nào vừa.',
         debtNote: 'Việc chưa làm được giữ lại thành nợ, quay lại khi có giờ trống thật.',
         done: 'Xong', more: 'Cần thêm 15 phút', skip: 'Không làm được',
@@ -189,6 +215,16 @@
     const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
     const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
+    // Two modes: 'demo' (the author's Friday, demo clock) and 'real' (your week, real time).
+    let mode = store.get('meso-mode') || 'demo';
+    let template = null;
+    try { template = JSON.parse(store.get('meso-template')); } catch {}
+    let setupImage = null;
+    const realNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+    const today = () => { const d = new Date(); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, weekday: d.getDay() }; };
+    const saveTemplate = () => store.set('meso-template', JSON.stringify(template));
+    function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; }
+
     let lang = store.get('meso-lang') || (navigator.language.startsWith('vi') ? 'vi' : 'en');
     let state = null, view = null;
     const t = (k) => T[lang][k];
@@ -198,15 +234,19 @@
       $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
       document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
       $('say').placeholder = t('placeholder');
-      $('mic').textContent = recorder ? t('stop') : t('speak');
+      $('setup-text').placeholder = t('setupPlaceholder');
+      $('setup-mic').textContent = recorder && micTarget === 'setup' ? t('stop') : t('speak');
+      $('setup-photo-chip').textContent = t('photoAdded');
+      $('mic').textContent = recorder && micTarget === 'say' ? t('stop') : t('speak');
       renderIntro();
       if (view) render();
     }
 
     function renderIntro() {
       if (store.get('meso-intro') === 'hidden') { $('intro').hidden = true; return; }
-      $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
+      $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="setup-open">${t('setupBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
       $('try').onclick = tryDemo;
+      $('setup-open').onclick = openSetup;
       $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
     }
 
@@ -243,7 +283,7 @@
     }
 
     function render() {
-      $('date').textContent = `${t('date')}, ${view.now}`;
+      $('date').textContent = `${mode === 'real' ? t('today') : t('date')}, ${view.now}`;
       $('clock').value = view.now;
       const [now, ...next] = view.queue;
 
@@ -289,37 +329,51 @@
         args = { id: item.id, status: 'skipped' };
       }
       apply(await api('/api/tool', { state, name: 'update_item', args }));
+      if (mode === 'real' && template && kind === 'done') {
+        const task = template.tasks.find((x) => x.id === item.id);
+        if (task) task.status = 'done';
+        template.done = template.done || {};
+        template.done[item.role] = (template.done[item.role] || 0) + args.minutes;
+        template.actuals = state.actuals;
+        saveTemplate();
+      }
     }
 
     // Voice check-in: record, convert to 16 kHz mono WAV (what the
     // transcription API accepts), transcribe, then send the text to the agent.
-    let recorder = null;
-    $('mic').onclick = async () => {
+    let recorder = null, micTarget = 'say';
+    $('mic').onclick = () => startMic('say');
+    $('setup-mic').onclick = () => startMic('setup');
+    async function startMic(target) {
       if (recorder) { recorder.stop(); return; }
+      micTarget = target;
+      const btn = target === 'setup' ? $('setup-mic') : $('mic');
+      const status = target === 'setup' ? $('setup-status') : $('status');
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-      catch { $('status').textContent = t('noMic'); return; }
+      catch { status.textContent = t('noMic'); return; }
       const chunks = [];
       recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunks.push(e.data);
       recorder.onstop = async () => {
         stream.getTracks().forEach((tr) => tr.stop());
         recorder = null;
-        $('mic').textContent = t('speak');
-        $('status').textContent = t('transcribing');
+        btn.textContent = t('speak');
+        status.textContent = t('transcribing');
         try {
           const wav = await toWav(new Blob(chunks));
           const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
           const data = await res.json();
           if (!data.ok) throw new Error(data.error);
-          $('say').value = data.text;
-          if (data.text) send(); else $('status').textContent = t('notCaught');
-        } catch (e) { $('status').textContent = e.message; }
+          if (!data.text) { status.textContent = t('notCaught'); return; }
+          if (target === 'setup') { $('setup-text').value = ($('setup-text').value + ' ' + data.text).trim(); status.textContent = ''; }
+          else { $('say').value = data.text; send(); }
+        } catch (e) { status.textContent = e.message; }
       };
       recorder.start();
-      $('mic').textContent = t('stop');
-      $('status').textContent = t('listening');
-    };
+      btn.textContent = t('stop');
+      status.textContent = t('listening');
+    }
 
     async function toWav(blob) {
       const ctx = new AudioContext({ sampleRate: 16000 });
@@ -338,16 +392,22 @@
     }
 
     // Photo: shrink it in the browser, then hand it to the agent (Muse Spark reads images).
-    $('photo').onclick = () => $('photo-file').click();
-    $('photo-file').onchange = async () => {
-      const file = $('photo-file').files[0];
-      $('photo-file').value = '';
-      if (!file) return;
+    let photoTarget = 'say';
+    $('photo').onclick = () => { photoTarget = 'say'; $('photo-file').click(); };
+    $('setup-photo').onclick = () => { photoTarget = 'setup'; $('photo-file').click(); };
+    async function shrink(file) {
       const img = await createImageBitmap(file);
       const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
       const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      const image = canvas.toDataURL('image/jpeg', 0.85);
+      return canvas.toDataURL('image/jpeg', 0.85);
+    }
+    $('photo-file').onchange = async () => {
+      const file = $('photo-file').files[0];
+      $('photo-file').value = '';
+      if (!file) return;
+      const image = await shrink(file);
+      if (photoTarget === 'setup') { setupImage = image; $('setup-photo-chip').hidden = false; return; }
       send($('say').value.trim() || (lang === 'vi' ? 'Thêm những gì trong ảnh vào hôm nay.' : 'Add what is in this photo to today.'), image);
     };
 
@@ -425,13 +485,50 @@
       cap('cap3');
     }
 
+    function openSetup() {
+      $('setup').hidden = false;
+      $('setup').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('setup-text').focus();
+    }
+    $('setup-cancel').onclick = () => { $('setup').hidden = true; };
+    $('rebuild').onclick = openSetup;
+    $('to-demo').onclick = async () => { setMode('demo'); await resetDay('07:00'); };
+    $('setup-go').onclick = async () => {
+      const text = $('setup-text').value.trim();
+      if (!text && !setupImage) return;
+      $('setup-go').disabled = true;
+      $('setup-status').textContent = t('building');
+      try {
+        const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang });
+        template = data.template; saveTemplate();
+        setMode('real');
+        $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
+        $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
+        apply(data);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) {
+        $('setup-status').textContent = e.message;
+      } finally {
+        $('setup-go').disabled = false;
+      }
+    };
+
+    // Real mode follows the real clock; a new day is built from the template.
+    async function tick() {
+      if (mode !== 'real' || !state || $('send').disabled) return;
+      const d = today();
+      if (state.date !== d.date && template) { apply(await api('/api/day', { template, ...d, now: realNow() })); return; }
+      if (realNow() > state.now) { state.now = realNow(); await refresh(); }
+    }
+    setInterval(tick, 60000);
+
     $('lang').onclick = async () => {
       lang = lang === 'vi' ? 'en' : 'vi';
       store.set('meso-lang', lang);
       applyLang();
-      await resetDay(view ? view.now : '07:00');
+      if (mode === 'demo') await resetDay(view ? view.now : '07:00');
     };
-    $('reset').onclick = () => resetDay($('clock').value || '07:00');
+    $('reset').onclick = () => { setMode('demo'); resetDay($('clock').value || '07:00'); };
     $('clock').onchange = async () => { state.now = toMin($('clock').value); await refresh(); };
     $('fb-send').onclick = async () => {
       const text = $('fb-text').value.trim();
@@ -443,7 +540,9 @@
     (async () => {
       applyLang();
       try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
-      if (state) await refresh(); else await resetDay();
+      setMode(mode);
+      if (mode === 'real' && template) { state = state || null; await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); }
+      else if (state) await refresh(); else await resetDay();
     })();
   </script>
 </body>
