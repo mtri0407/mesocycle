@@ -25,7 +25,8 @@ const view = (state) => runTool(state, 'get_state', {}).result;
 
 // Guard for routes that call a model: at most 12 a minute per visitor
 // (Cloudflare rate limit binding) and a daily ceiling for the whole app (KV).
-const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin'];
+const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/model-check', '/api/feedback', '/api/reminders'];
+const MAX_IMAGE_CHARS = 8e6;
 const DAILY_CAP = 3000;
 async function aiGuard(request, env) {
   const ip = request.headers.get('cf-connecting-ip') || 'local';
@@ -33,11 +34,15 @@ async function aiGuard(request, env) {
     const { success } = await env.AI_LIMIT.limit({ key: ip });
     if (!success) return json({ ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' }, 429);
   }
+  // This counter is only a ceiling on spending. KV allows 1,000 writes a day on
+  // the free plan, so it counts in steps of 5, and a KV failure never stops the AI.
   if (env.FEEDBACK) {
-    const key = `calls:${new Date().toISOString().slice(0, 10)}`;
-    const n = Number(await env.FEEDBACK.get(key)) || 0;
-    if (n >= DAILY_CAP) return json({ ok: false, code: 'cap', error: 'The demo hit its daily AI limit. Try again tomorrow, or watch the video.' }, 429);
-    await env.FEEDBACK.put(key, String(n + 1), { expirationTtl: 3 * 86400 });
+    try {
+      const key = `calls:${new Date().toISOString().slice(0, 10)}`;
+      const n = Number(await env.FEEDBACK.get(key)) || 0;
+      if (n >= DAILY_CAP) return json({ ok: false, code: 'cap', error: 'The demo hit its daily AI limit. Try again tomorrow, or watch the video.' }, 429);
+      if (Math.random() < 0.2) await env.FEEDBACK.put(key, String(n + 5), { expirationTtl: 3 * 86400 });
+    } catch { /* see above */ }
   }
   return null;
 }
@@ -49,7 +54,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
-      if (request.method === 'POST' && AI_ROUTES.includes(url.pathname)) {
+      if ((request.method === 'POST' || url.pathname === '/api/model-check') && AI_ROUTES.includes(url.pathname)) {
         const blocked = await aiGuard(request, env);
         if (blocked) return blocked;
       }
@@ -70,6 +75,7 @@ export default {
 
       const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
       if (request.method === 'POST' && !body) return json({ ok: false, error: 'Body must be JSON' }, 400);
+      if (body?.image?.length > MAX_IMAGE_CHARS) return json({ ok: false, error: 'Image too large' }, 413);
 
       if (url.pathname === '/api/health') {
         return json({ ok: true, provider: env.MODEL_PROVIDER || 'meta' });

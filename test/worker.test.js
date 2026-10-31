@@ -37,3 +37,17 @@ test('deleting also removes the consent record', async () => {
   await del(sid);
   assert.equal(store.m.size, 0);
 });
+
+test('a full KV never stops the AI routes', async () => {
+  const broken = { get: async () => null, put: async () => { throw new Error('KV PUT failed: 429 Too Many Requests'); } };
+  for (let i = 0; i < 20; i++) {
+    const res = await worker.fetch(new Request('http://x/api/setup', { method: 'POST', body: '{}' }), { FEEDBACK: broken }, {});
+    assert.equal(res.status, 400); // reached the route: "Describe your week first"
+  }
+});
+
+test('oversized images are refused before any model call', async () => {
+  const body = JSON.stringify({ image: 'x'.repeat(8e6 + 1) });
+  const res = await worker.fetch(new Request('http://x/api/agent', { method: 'POST', body }), { FEEDBACK: fakeKv({}) }, {});
+  assert.equal(res.status, 413);
+});

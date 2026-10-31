@@ -472,10 +472,15 @@
       $('logout').textContent = t('logout');
       $('gsi').hidden = !!account || !googleClientId || !consented();
     }
+    let savedSig = '';
     function scheduleSave() {
       if (!sid || mode !== 'real' || template?.sample) return;
+      // The clock moves every minute; that alone is not worth a write.
+      const sig = JSON.stringify([template, state?.queue, state?.fixed, stats]);
+      if (sig === savedSig) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
+        savedSig = sig;
         fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ mode, template, state, stats: typeof stats !== 'undefined' ? stats : null }) })
           .then((r) => { if (r.status === 401) signOutLocal(); }).catch(() => {});
       }, 1500);
