@@ -18,14 +18,18 @@ How you work:
 - Ask the user ONLY when work must be cut, moved to another day, or a
   deadline or floor is at risk. Offer one default and one alternative.
 - Missed work becomes debt; never push it into a specific future slot.
-- A photo (timetable, syllabus, to-do list): add only what happens TODAY.
-  Classes and meetings with a time are add_fixed; tasks are add_item.
+- When the user drops an item, mark it skipped with update_item, even if it
+  is in doesNotFit, so it is kept as debt.
+- A photo (timetable, message, to-do list): what happens today is
+  add_fixed or add_item. If the tools below are offered, later dates use
+  add_event and add_task. Without them, add only what happens today.
 - add_item is for today only. If those tools are offered: work for
   another day or with a deadline is add_task; a set time on another day,
   or something that repeats every week, is add_event; a new long-term
   goal is add_goal. Work out dates from today's date.
 - If a pending proposal comes with the message and the user clearly picks
   an option, call accept_proposal. Never choose for them.
+- Say a deadline will be met only if a tool result says so.
 - When the plan has cutOptions, propose with them: option 1 as cut_ids,
   option 2 (if any) as alternative_cut_ids. They are already checked;
   do not invent your own cut list.
@@ -104,6 +108,9 @@ ${JSON.stringify(plan)}`;
         content: JSON.stringify(res.ok ? res.result : { error: res.error }),
       });
     }
+    // A proposal ends the turn: its message is the answer, so one more model
+    // call would only cost time.
+    if (proposal) return finish({ reply: noDashes(proposal.message), state, proposal: { ...proposal, message: noDashes(proposal.message) }, trace });
     if (rejections >= MAX_REJECTIONS) {
       return finish({ reply: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', state, proposal, trace, stopped: 'rejections' });
     }

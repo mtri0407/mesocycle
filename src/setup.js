@@ -1,7 +1,7 @@
 // "Set up my week in 60 seconds": the user describes their week (voice or
 // text, optionally a timetable photo). Muse Spark answers with one build_week
 // tool call; code checks it and builds today's plan from it.
-import { replan, toMin, freeWindows } from './planner.js';
+import { replan, toMin, freeWindows, sleepMinutes, sleepIsValid } from './planner.js';
 
 export const SETUP_PROMPT = `You turn a person's description of their week into a plan template
 by calling build_week exactly once.
@@ -16,7 +16,8 @@ by calling build_week exactly once.
 - tasks: flexible work as blocks of 30 to 120 minutes, enough blocks to
   cover each role's weeklyHours. rank 1 for the most important block of a
   role, then 2, 3, or "extra" for nice-to-have. Deadlines as YYYY-MM-DD.
-- wake and sleep as HH:MM. Default 07:00 and 23:00.
+- wake and sleep as HH:MM. Default 07:00 and 23:00. Sleep can be after
+  midnight, up to 04:00.
 - goals: the longer-term results they mention (a GPA, a revenue target, an
   exam, a lift). role = the role that serves it, measure = how they would
   know they got there, deadline as YYYY-MM-DD if they gave one. Leave goals
@@ -90,7 +91,7 @@ export function validateWeek(a) {
     if (!byName.has(String(g?.role || '').trim().toLowerCase())) errors.push(`goals[${i}].role "${g?.role}" is not one of the roles.`);
     if (g?.deadline && !DATE.test(g.deadline)) errors.push(`goals[${i}].deadline must be YYYY-MM-DD.`);
   });
-  if (!HHMM.test(a.wake || '') || !HHMM.test(a.sleep || '') || toMin(a.sleep) <= toMin(a.wake)) errors.push('wake and sleep must be HH:MM with sleep after wake (same day).');
+  if (!HHMM.test(a.wake || '') || !HHMM.test(a.sleep || '') || !sleepIsValid(a.wake, a.sleep)) errors.push('wake and sleep must be HH:MM, sleep after wake or up to 04:00 after midnight.');
   if (errors.length) return { errors };
 
   return {
@@ -134,7 +135,7 @@ export function buildDay(template, { date, weekday, now }) {
   const state = {
     date,
     now,
-    settings: { wake: toMin(template.wake), sleep: toMin(template.sleep), fillRatio: 0.6, bufferMin: 15 },
+    settings: { wake: toMin(template.wake), sleep: sleepMinutes(template.wake, template.sleep), fillRatio: 0.6, bufferMin: 15 },
     roles: template.roles,
     // Floors are weekly: the days left can still cover their share.
     week: Object.fromEntries(template.roles.map((r) => [r.id, {
@@ -298,7 +299,7 @@ export function goalPace(t, { weekday, date }) {
 
 // Usable minutes in a normal week: free time times the 60% fill rule.
 export function weekCapacityMin(t) {
-  const settings = { wake: toMin(t.wake), sleep: toMin(t.sleep) };
+  const settings = { wake: toMin(t.wake), sleep: sleepMinutes(t.wake, t.sleep) };
   let total = 0;
   for (let wd = 0; wd < 7; wd++) {
     const fixed = t.fixed.filter((f) => f.days.includes(wd)).map((f) => ({ start: toMin(f.start), end: toMin(f.end) }));
@@ -396,7 +397,7 @@ export function checkTemplate(t, lang = 'en') {
   const m = (en, vi) => (lang === 'vi' ? vi : en);
   const errors = [];
   if (!t || !Array.isArray(t.roles) || !t.roles.length) return [m('At least one role is needed.', 'Cần ít nhất một vai trò.')];
-  if (!HHMM.test(t.wake || '') || !HHMM.test(t.sleep || '') || toMin(t.sleep) <= toMin(t.wake)) errors.push(m('Sleep must be after wake.', 'Giờ ngủ phải sau giờ dậy.'));
+  if (!HHMM.test(t.wake || '') || !HHMM.test(t.sleep || '') || !sleepIsValid(t.wake, t.sleep)) errors.push(m('Sleep must be after wake, or up to 04:00 after midnight.', 'Giờ ngủ phải sau giờ dậy, hoặc tối đa 04:00 sau nửa đêm.'));
   for (const r of t.roles) {
     if (!String(r.name || '').trim()) errors.push(m('Every role needs a name.', 'Vai trò nào cũng cần tên.'));
     if (!(r.targetMin >= 0 && r.targetMin <= 4800)) errors.push(m(`${r.name}: weekly hours must be 0 to 80.`, `${r.name}: giờ mỗi tuần phải từ 0 đến 80.`));

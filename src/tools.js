@@ -78,6 +78,12 @@ export const TOOL_DEFS = [
 export const TOOLS = TOOL_DEFS.map((t) => ({ type: 'function', function: t }));
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+// 00:30 means after midnight when the day runs that long, not this morning.
+function dayMin(state, hhmm) {
+  const m = toMin(hhmm);
+  const { wake, sleep } = { ...DEFAULT_SETTINGS, ...state.settings };
+  return m < wake && m + 1440 < sleep ? m + 1440 : m;
+}
 const reject = (error) => ({ ok: false, error });
 const intIn = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
@@ -158,10 +164,10 @@ export function runTool(state, name, args) {
       if (typeof title !== 'string' || !title.trim()) return { ...reject('title is required.'), state };
       if (!HHMM.test(start || '')) return { ...reject('start must be HH:MM (24h).'), state };
       if (!intIn(minutes, 5, 600)) return { ...reject('minutes must be an integer from 5 to 600.'), state };
-      if (toMin(start) + minutes <= state.now) return { ...reject(`That ends before now (${toHHMM(state.now)}).`), state };
+      if (dayMin(state, start) + minutes <= state.now) return { ...reject(`That ends before now (${toHHMM(state.now)}).`), state };
       let n = state.fixed.length + 1;
       while (state.fixed.some((f) => f.id === `fix-${n}`)) n++;
-      const next = applyEvent(state, { type: 'interrupt', start: toMin(start), minutes, title: title.trim(), newId: `fix-${n}` });
+      const next = applyEvent(state, { type: 'interrupt', start: dayMin(state, start), minutes, title: title.trim(), newId: `fix-${n}` });
       return done(next);
     }
 

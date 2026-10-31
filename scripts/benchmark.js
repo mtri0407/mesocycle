@@ -2,7 +2,7 @@
 // 20 scenarios (10 English, 10 Vietnamese) on the demo day. For each run:
 // did the agent do what was asked, how many tool calls were rejected,
 // how many model round trips, how long. Keys come from .dev.vars.
-//   node scripts/benchmark.js [meta,open] [runsPerScenario]
+//   node scripts/benchmark.js [meta,open] [runsPerScenario] [effort]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { chat } from '../src/models.js';
 import { runAgent } from '../src/agent.js';
@@ -15,6 +15,7 @@ const env = Object.fromEntries(readFileSync(new URL('../.dev.vars', import.meta.
   .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const providers = (process.argv[2] || 'meta,open').split(',');
 const reps = Number(process.argv[3] || 1);
+const effort = process.argv[4] || undefined;
 
 const hasFixedAt = (hhmm) => (s) => s.fixed.some((f) => f.start === toMin(hhmm));
 const status = (id, st) => (s) => s.queue.find((q) => q.id === id)?.status === st;
@@ -38,13 +39,14 @@ const SCENARIOS = [
 async function runOne(provider, lang, [time, en, vi, check]) {
   const state = demoState(toMin(time), lang);
   let calls = 0;
-  const chatFn = async (messages, tools) => { calls++; return chat(env, { messages, tools, maxTokens: 4000 }, provider); };
+  let tokens = 0;
+  const chatFn = async (messages, tools) => { calls++; const out = await chat(env, { messages, tools, maxTokens: 4000, effort }, provider); tokens += out.usage?.total_tokens || 0; return out; };
   const t0 = Date.now();
   try {
     const out = await runAgent({ state, userText: lang === 'vi' ? vi : en, chatFn });
     const errors = checkPlan(out.state, replan(out.state));
     const rejected = out.trace.filter((s) => !s.ok).length;
-    return { provider, lang, time, ok: check(out.state) && !out.stopped && errors.length === 0, rejected, calls, ms: Date.now() - t0 };
+    return { provider, lang, time, ok: check(out.state) && !out.stopped && errors.length === 0, rejected, calls, tokens, ms: Date.now() - t0 };
   } catch (e) {
     return { provider, lang, time, ok: false, rejected: 0, calls, ms: Date.now() - t0, error: String(e.message).slice(0, 120) };
   }
@@ -66,12 +68,12 @@ await Promise.all(Array.from({ length: POOL }, async () => {
 }));
 
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
-const lines = ['| Model | Runs | Task done, rules kept | No rejected call | Median model calls | Median time |', '|---|---|---|---|---|---|'];
+const lines = ['| Model | Runs | Task done, rules kept | No rejected call | Median model calls | Median time | Slowest |', '|---|---|---|---|---|---|---|'];
 for (const p of providers) {
   const rs = results.filter((r) => r.provider === p);
   const pct = (n) => `${n}/${rs.length} (${Math.round((n / rs.length) * 100)}%)`;
-  lines.push(`| ${p === 'meta' ? 'Muse Spark 1.3' : 'Muse Spark Open'} | ${rs.length} | ${pct(rs.filter((r) => r.ok).length)} | ${pct(rs.filter((r) => r.rejected === 0).length)} | ${median(rs.map((r) => r.calls))} | ${(median(rs.map((r) => r.ms)) / 1000).toFixed(1)}s |`);
+  lines.push(`| ${p === 'meta' ? 'Muse Spark 1.3' : 'Muse Spark Open'} | ${rs.length} | ${pct(rs.filter((r) => r.ok).length)} | ${pct(rs.filter((r) => r.rejected === 0).length)} | ${median(rs.map((r) => r.calls))} | ${(median(rs.map((r) => r.ms)) / 1000).toFixed(1)}s | ${(Math.max(...rs.map((r) => r.ms)) / 1000).toFixed(1)}s |`);
 }
 const table = lines.join('\n');
 console.log('\n' + table);
-writeFileSync(new URL('../docs/BENCHMARK.md', import.meta.url), `# Muse Spark vs Muse Spark Open\n\nSame agent, tools and rules; 10 scenarios in English and Vietnamese on the demo day. Run ${new Date().toISOString().slice(0, 10)}.\n\n${table}\n\nA run counts as done when the requested change is in the plan, the agent finished on its own, and every planner promise in src/invariants.js still holds.\n`);
+writeFileSync(new URL('../docs/BENCHMARK.md', import.meta.url), `# Muse Spark vs Muse Spark Open\n\nSame agent, tools and rules; 10 scenarios in English and Vietnamese on the demo day. Run ${new Date().toISOString().slice(0, 10)}${effort ? `, reasoning effort ${effort}` : ''}.\n\n${table}\n\nA run counts as done when the requested change is in the plan, the agent finished on its own, and every planner promise in src/invariants.js still holds.\n`);

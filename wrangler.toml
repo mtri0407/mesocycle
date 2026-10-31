@@ -27,7 +27,15 @@ id = "314d552393544b1faffe8fd90abedaa4"
 name = "AI_LIMIT"
 namespace_id = "1001"
   [ratelimits.simple]
-  limit = 12
+  limit = 20
+  period = 60
+
+# A loose limit per network, so a made-up visitor id does not buy much.
+[[ratelimits]]
+name = "AI_IP_LIMIT"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 120
   period = 60
 
 # Run in the US. Meta's API lists no models for requests leaving Hong Kong,

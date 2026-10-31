@@ -2,7 +2,7 @@
 // API keys live only here (env), never in the browser.
 // The browser keeps the plan and sends it with each request. Signed-in users
 // also get a saved copy in KV (see auth.js).
-import { chat, transcribe } from './models.js';
+import { chat, chatSafe, transcribe } from './models.js';
 import { runAgent, noDashes } from './agent.js';
 import { runTool } from './tools.js';
 import { applyEvent } from './planner.js';
@@ -23,28 +23,46 @@ function json(data, status = 200) {
 
 const view = (state) => runTool(state, 'get_state', {}).result;
 
+const AGENT_EFFORT = 'low'; // docs/BENCHMARK.md: the lowest level that kept the score
+
 // Guard for routes that call a model: at most 12 a minute per visitor
 // (Cloudflare rate limit binding) and a daily ceiling for the whole app (KV).
 const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/model-check', '/api/feedback', '/api/reminders'];
 const MAX_IMAGE_CHARS = 8e6;
-const DAILY_CAP = 3000;
-async function aiGuard(request, env) {
+const SOFT_CAP = 1200; // about 10 USD a day of Meta credit; past it, the open model answers
+const HARD_CAP = 3000;
+const RATE_ERROR = { ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' };
+async function aiGuard(request, env, url) {
   const ip = request.headers.get('cf-connecting-ip') || 'local';
-  if (env.AI_LIMIT) {
-    const { success } = await env.AI_LIMIT.limit({ key: ip });
-    if (!success) return json({ ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' }, 429);
-  }
+  // Per person, not per network: judges in one office share an IP. A loose
+  // limit per IP remains, so a made-up visitor id does not buy much.
+  const claimed = request.headers.get('x-visitor') || url.searchParams.get('v') || '';
+  const visitor = /^[a-z0-9]{8,40}$/.test(claimed) ? claimed : ip;
+  if (env.AI_IP_LIMIT && !(await env.AI_IP_LIMIT.limit({ key: ip })).success) return { blocked: json(RATE_ERROR, 429) };
+  if (env.AI_LIMIT && !(await env.AI_LIMIT.limit({ key: visitor })).success) return { blocked: json(RATE_ERROR, 429) };
   // This counter is only a ceiling on spending. KV allows 1,000 writes a day on
   // the free plan, so it counts in steps of 5, and a KV failure never stops the AI.
   if (env.FEEDBACK) {
     try {
       const key = `calls:${new Date().toISOString().slice(0, 10)}`;
       const n = Number(await env.FEEDBACK.get(key)) || 0;
-      if (n >= DAILY_CAP) return json({ ok: false, code: 'cap', error: 'The demo hit its daily AI limit. Try again tomorrow, or watch the video.' }, 429);
+      if (n >= HARD_CAP) return { blocked: json({ ok: false, code: 'cap', error: 'The demo hit its daily AI limit. Try again tomorrow, or watch the video.' }, 429) };
       if (Math.random() < 0.2) await env.FEEDBACK.put(key, String(n + 5), { expirationTtl: 3 * 86400 });
+      return { overBudget: n >= SOFT_CAP };
     } catch { /* see above */ }
   }
-  return null;
+  return {};
+}
+
+// One real model call per provider, at most every 10 minutes. The monitor in
+// .github/workflows/uptime.yml reads this.
+let health = { at: 0, body: null };
+async function deepHealth(env) {
+  if (Date.now() - health.at < 600_000) return health.body;
+  const probe = (p) => chat(env, { messages: [{ role: 'user', content: 'Reply with exactly: ok' }], maxTokens: 1000, effort: 'minimal', timeoutMs: 20_000 }, p).then((o) => !!o.text, () => false);
+  const [meta, open] = await Promise.all([probe('meta'), probe('open')]);
+  health = { at: Date.now(), body: { ok: meta && open, meta, open } };
+  return health.body;
 }
 
 export default {
@@ -54,15 +72,17 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
+      let overBudget = false;
       if ((request.method === 'POST' || url.pathname === '/api/model-check') && AI_ROUTES.includes(url.pathname)) {
-        const blocked = await aiGuard(request, env);
-        if (blocked) return blocked;
+        const guard = await aiGuard(request, env, url);
+        if (guard.blocked) return guard.blocked;
+        overBudget = !!guard.overBudget;
       }
 
       // Live voice: a WebSocket through this Worker, which holds the key.
       if (url.pathname === '/api/voice') {
         if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'WebSocket only' }, 426);
-        const blocked = await aiGuard(request, env);
+        const { blocked } = await aiGuard(request, env, url);
         return blocked || await voiceProxy(env, url.searchParams.get('call') === '1');
       }
 
@@ -78,13 +98,18 @@ export default {
       if (body?.image?.length > MAX_IMAGE_CHARS) return json({ ok: false, error: 'Image too large' }, 413);
 
       if (url.pathname === '/api/health') {
-        return json({ ok: true, provider: env.MODEL_PROVIDER || 'meta' });
+        if (url.searchParams.get('deep') !== '1') return json({ ok: true, provider: env.MODEL_PROVIDER || 'meta' });
+        const { blocked } = await aiGuard(request, env, url);
+        if (blocked) return blocked;
+        const body = await deepHealth(env);
+        return json(body, body.ok ? 200 : 503);
       }
 
       if (url.pathname === '/api/model-check') {
         const out = await chat(env, {
           messages: [{ role: 'user', content: 'Reply with exactly: Mesocycle is alive.' }],
-          maxTokens: 400, // reasoning models think first; 30 tokens ran out before any answer
+          maxTokens: 1000, // reasoning models think first; a small limit leaves no answer
+          effort: 'minimal',
         }, url.searchParams.get('provider'));
         return json({ ok: true, provider: out.provider, ms: out.ms, text: out.text });
       }
@@ -111,12 +136,15 @@ export default {
       // Free text (later: voice) goes to the agent.
       if (url.pathname === '/api/agent' && body) {
         // Photos always go to Muse Spark (image understanding).
-        const provider = body.image ? 'meta' : body.provider || url.searchParams.get('provider');
+        const chosen = body.provider === 'open' ? 'open' : 'meta';
+        const provider = overBudget ? 'open' : chosen;
         if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
-        let modelMs = 0;
+        let modelMs = 0, usedProvider = provider, fellBack = false;
         const chatFn = async (messages, tools) => {
-          const out = await chat(env, { messages, tools, maxTokens: 4000 }, provider);
+          const out = await chatSafe(env, { messages, tools, maxTokens: 4000, effort: AGENT_EFFORT }, provider);
           modelMs += out.ms;
+          usedProvider = out.provider;
+          fellBack = fellBack || !!out.fellBack;
           return out;
         };
         // Only short plain turns are kept as memory of the conversation.
@@ -126,7 +154,7 @@ export default {
         const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call };
         if (!body.stream) {
           const out = await runAgent(args);
-          return json({ ok: true, ...out, modelMs, view: view(out.state) });
+          return json({ ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
         }
         // Streamed: one JSON line per tool call as it happens, then the result.
         const { readable, writable } = new TransformStream();
@@ -135,7 +163,7 @@ export default {
         ctx.waitUntil((async () => {
           try {
             const out = await runAgent({ ...args, onStep: (step) => send({ type: 'step', ...step }) });
-            await send({ type: 'done', ok: true, ...out, modelMs, view: view(out.state) });
+            await send({ type: 'done', ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
           } catch (err) {
             await send({ type: 'done', ok: false, error: String(err.message || err) });
           }
@@ -146,10 +174,10 @@ export default {
 
       // Morning check-in: read-only, no tools, so it cannot change the plan.
       if (url.pathname === '/api/checkin' && body) {
-        const out = await chat(env, { messages: [
+        const out = await chatSafe(env, { effort: 'minimal', messages: [
           { role: 'system', content: CHECKIN_PROMPT },
           { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\n${checkinBrief(body.template, view(body.state), { weekday: body.weekday, date: body.state.date })}` },
-        ], maxTokens: 6000 }, 'meta'); // the model thinks first; 1500 could leave no answer
+        ], maxTokens: 3000 }, overBudget ? 'open' : 'meta');
         return json({ ok: true, text: noDashes(out.text.trim()) });
       }
 
@@ -165,7 +193,7 @@ export default {
         const steps = [];
         let modelMs = 0;
         for (let i = 0; i < 3; i++) {
-          const out = await chat(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000 }, 'meta');
+          const out = await chatSafe(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, overBudget ? 'open' : 'meta');
           modelMs += out.ms;
           const call = out.toolCalls.find((c) => c.name === 'plan_next_week');
           if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call plan_next_week now.' }); steps.push({ ok: false, error: 'no plan_next_week call' }); continue; }
@@ -190,7 +218,7 @@ export default {
         const steps = [];
         let modelMs = 0;
         for (let i = 0; i < 3; i++) {
-          const out = await chat(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000 }, 'meta');
+          const out = await chatSafe(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, overBudget ? 'open' : 'meta');
           modelMs += out.ms;
           const call = out.toolCalls.find((c) => c.name === 'build_week');
           if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call build_week now.' }); steps.push({ ok: false, error: 'no build_week call' }); continue; }

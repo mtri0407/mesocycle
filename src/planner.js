@@ -19,8 +19,18 @@ export function toMin(hhmm) {
 }
 
 export function toHHMM(min) {
-  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  const m = ((min % 1440) + 1440) % 1440; // a day can run past midnight
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
+
+// Bedtime can be after midnight, up to 04:00. Then it counts as later than
+// 24:00 of the same day, so the planner's day simply runs longer.
+export const LATEST_SLEEP = 4 * 60;
+export function sleepMinutes(wake, sleep) {
+  const s = toMin(sleep);
+  return s > toMin(wake) ? s : s + 1440;
+}
+export const sleepIsValid = (wake, sleep) => toMin(sleep) > toMin(wake) || (toMin(sleep) <= LATEST_SLEEP && toMin(wake) > LATEST_SLEEP);
 
 // Free time between now and sleep, minus fixed events (classes, exams, meetings).
 export function freeWindows(now, fixed, settings) {

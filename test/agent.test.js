@@ -85,11 +85,19 @@ test('agent loop stops after 3 rejected calls', async () => {
 test('a proposal from the agent is returned for the user to approve, nothing is cut yet', async () => {
   const s = demoState(toMin('17:00'));
   const cut = runTool(s, 'get_state', {}).result.doesNotFit.map((x) => x.id);
-  const out = await runAgent({
-    state: s,
-    userText: 'chiều nay tôi ngủ quên',
-    chatFn: fakeModel([[['get_state', {}]], [['propose', { message: 'Cut these?', cut_ids: cut }]], 'Approve?']),
-  });
+  const model = fakeModel([[['get_state', {}]], [['propose', { message: 'Cut these?', cut_ids: cut }]], 'never reached']);
+  const out = await runAgent({ state: s, userText: 'chiều nay tôi ngủ quên', chatFn: model });
   assert.deepEqual(out.proposal.options[0], cut);
+  assert.equal(out.reply, 'Cut these?');
+  assert.equal(model.seen.length, 2); // the proposal ends the turn, no third call
   assert.ok(out.state.queue.every((i) => i.status === 'todo'));
+});
+
+test('after midnight: times read as the same long day', async () => {
+  const s = { ...demoState(23 * 60), settings: { ...demoState().settings, sleep: 25 * 60 + 30 } };
+  const added = runTool(s, 'add_fixed', { title: 'Late call', start: '00:30', minutes: 30 });
+  assert.equal(added.ok, true);
+  assert.equal(added.state.fixed[0].start, 24 * 60 + 30);
+  assert.equal(added.result.fixed[0].start, '00:30');
+  assert.equal(added.result.sleep, '01:30');
 });

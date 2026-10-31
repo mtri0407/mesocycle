@@ -269,3 +269,16 @@ for (const lang of ['en', 'vi']) {
     assert.ok(goalPace(friday, { weekday: 5, date: '2026-11-13' }).some((g) => g.behind));
   });
 }
+
+test('bedtime after midnight is a longer day, not an error', () => {
+  const { template, errors } = validateWeek(week({ sleep: '01:00' }));
+  assert.equal(errors, undefined);
+  const day = buildDay(template, { date: '2026-11-03', weekday: 2, now: 22 * 60 });
+  assert.equal(day.settings.sleep, 25 * 60);
+  const plan = replan(day);
+  assert.deepEqual(checkPlan(day, plan), []);
+  assert.equal(plan.freeMin, 180); // 22:00 to 01:00
+  assert.deepEqual(checkTemplate(template), []);
+  assert.ok(validateWeek(week({ sleep: '05:00' })).errors.length); // that is a morning, not a bedtime
+  assert.ok(checkTemplate({ ...template, sleep: '06:00' }).length);
+});

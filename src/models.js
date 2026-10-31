@@ -8,12 +8,14 @@ export const PROVIDERS = {
     baseUrl: 'https://api.meta.ai/v1',
     model: 'muse-spark-1.3',
     keyName: 'MODEL_API_KEY',
+    cacheKey: 'mesocycle-v1',
   },
   open: {
     label: 'Muse Spark Open (open weights, served by Baseten)',
     baseUrl: 'https://inference.baseten.co/v1',
     model: 'meta-models/muse-spark-open-1026',
     keyName: 'BASETEN_API_KEY',
+    efforts: { minimal: 'low' }, // Muse Spark Open has no minimal level
   },
 };
 
@@ -27,9 +29,12 @@ export function pickProvider(env, override) {
 }
 
 // Builds the HTTP request without sending it, so tests can check it offline.
-export function buildChatRequest(provider, { messages, tools, maxTokens = 800 }) {
+export function buildChatRequest(provider, { messages, tools, maxTokens = 800, effort, format }) {
   const body = { model: provider.model, messages, max_tokens: maxTokens };
   if (tools && tools.length) body.tools = tools;
+  if (effort) body.reasoning_effort = provider.efforts?.[effort] || effort;
+  if (format) body.response_format = format;
+  if (provider.cacheKey) body.prompt_cache_key = provider.cacheKey; // same prefix, same cache, cheaper and faster
   return {
     url: `${provider.baseUrl}/chat/completions`,
     init: {
@@ -54,17 +59,37 @@ export function readChatResponse(json) {
     try { args = JSON.parse(c.function?.arguments || '{}'); } catch { /* keep null */ }
     return { id: c.id, name: c.function?.name, args, rawArgs: c.function?.arguments };
   });
-  return { text: msg.content || '', toolCalls, message: msg };
+  return { text: msg.content || '', toolCalls, message: msg, usage: json.usage };
 }
+
+// Failures that are the provider's, not ours: trying the other model can help.
+const SWITCH_ON = new Set([404, 408, 429, 500, 502, 503, 504, 529]);
 
 export async function chat(env, opts, override) {
   const provider = pickProvider(env, override);
   const { url, init } = buildChatRequest(provider, opts);
   const started = Date.now();
-  const res = await fetch(url, init);
+  let res;
+  try {
+    res = await fetch(url, { ...init, signal: AbortSignal.timeout(opts.timeoutMs || 30_000) });
+  } catch (err) {
+    throw Object.assign(new Error(`${provider.label}: ${err.message}`), { canSwitch: true });
+  }
   const raw = await res.text();
-  if (!res.ok) throw new Error(`${provider.label} HTTP ${res.status}: ${raw.slice(0, 300)}`);
+  if (!res.ok) throw Object.assign(new Error(`${provider.label} HTTP ${res.status}: ${raw.slice(0, 300)}`), { status: res.status, canSwitch: SWITCH_ON.has(res.status) });
   return { provider: provider.name, ms: Date.now() - started, ...readChatResponse(JSON.parse(raw)) };
+}
+
+// Meta first, Muse Spark Open if Meta fails. Never the other way round: a
+// person who chose the open model chose where their words go.
+export async function chatSafe(env, opts, prefer) {
+  const first = prefer || env.MODEL_PROVIDER || 'meta';
+  try {
+    return await chat(env, opts, first);
+  } catch (err) {
+    if (first !== 'meta' || !err.canSwitch || !env.BASETEN_API_KEY) throw err;
+    return { ...(await chat(env, opts, 'open')), fellBack: true };
+  }
 }
 
 // Muse Voice Transcribe: one recorded clip (WAV) in, plain text out.
