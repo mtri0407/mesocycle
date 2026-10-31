@@ -29,7 +29,7 @@ training advice. If the user mentions feeling sick or stressed, only ask
 how much time they have today.`;
 
 // House style: no em or en dashes in anything the user reads.
-const noDashes = (s) => s.replace(/s*[–—]s*/g, ', ');
+const noDashes = (s) => s.replace(/\s*[–—]\s*/g, ', ');
 
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries
