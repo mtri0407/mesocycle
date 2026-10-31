@@ -391,3 +391,10 @@ test('the diff comes from the plans: moved, added, debt, new work for later', ()
 test('on Sunday the week is over: nothing is forecast past it', () => {
   assert.deepEqual(forecastWeek(tpl(), { weekday: 0 }).days, []);
 });
+
+test('radar: an overdue task stays overdue even when there is time to finish it', () => {
+  const late = { ...tpl(), tasks: [{ id: 't1', title: 'Old', roleId: 'r1', minutes: 30, rank: 1, status: 'todo', deadline: '2026-11-01' }] };
+  const [row] = radarFor(late);
+  assert.equal(row.ok, false);
+  assert.equal(row.shortMin, 30);
+});

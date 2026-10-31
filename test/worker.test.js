@@ -67,3 +67,17 @@ test('import: only documents, only well-formed future dates, and private mode ne
   assert.deepEqual(out.events.map((e) => e.title), ['Exam']);
   assert.deepEqual(readImport('not json', '2026-11-01'), { deadlines: [], events: [] });
 });
+
+test('feedback keeps the rating only if valid, and quoting needs an explicit yes', async () => {
+  const store = fakeKv({});
+  const send = (b) => worker.fetch(new Request('http://x/api/feedback', { method: 'POST', body: JSON.stringify(b) }), { FEEDBACK: store }, {});
+  await send({ text: 'a', rating: 5, quote: true });
+  await send({ text: 'b', rating: 99, quote: 'yes' });
+  const notes = [...store.m.entries()].filter(([k]) => k.startsWith('2026') || /^\d{4}-/.test(k)).map(([, v]) => JSON.parse(v));
+  const a = notes.find((n) => n.text === 'a');
+  const b = notes.find((n) => n.text === 'b');
+  assert.equal(a.rating, 5);
+  assert.equal(a.quote, true);
+  assert.equal(b.rating, null);
+  assert.equal(b.quote, false);
+});

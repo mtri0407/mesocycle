@@ -24,6 +24,7 @@
       }
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
     main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -240,7 +241,9 @@
     <details class="card">
       <summary data-t="feedback"></summary>
       <p class="hint" data-t="feedbackHint"></p>
+      <div class="row" id="fb-stars" role="radiogroup" style="margin-top:8px"></div>
       <textarea id="fb-text" style="margin-top:8px"></textarea>
+      <label class="consent"><input type="checkbox" id="fb-quote"> <span data-t="fbQuote"></span></label>
       <div class="row" style="margin-top:8px">
         <button id="fb-send" data-t="send"></button>
         <span class="hint" id="fb-status"></span>
@@ -369,6 +372,7 @@
         privateOn: '🔒 More private', privateHint: 'Runs on Muse Spark Open through Baseten, which says it does not keep or train on your requests. Voice still goes to Meta.',
         kindWork: 'Commitment', kindLife: 'Life',
         recording: 'The AI is busy right now, so this is a recording of one real run.',
+        fbQuote: 'You may quote this, without my name', fbRate: 'How useful was it?',
         callStop: 'Interrupt', whichOne: 'Which one?', consentYes: 'I agree', pastBedtime: 'Past bedtime. See you tomorrow.',
         importTitle: 'Add a syllabus', importIntro: 'Add a PDF or a photo of a syllabus, exam timetable or message. Muse Spark finds the dates, and you choose what to keep.', importBtn: '📎 Add a file', importSample: 'Try a sample syllabus',
         importing: 'Muse Spark is reading it...', importEmpty: 'No dates found.', importHint: 'Untick anything you do not want. Nothing is added until you confirm.', importEstimate: (h) => `about ${h}h of work`, importAdd: (n) => `Add ${n}`, importDone: 'Added. The Week tab shows if any deadline is at risk.', importPrivate: 'PDFs need Muse Spark. Turn off More private, or add a photo.',
@@ -445,6 +449,7 @@
         privateOn: '🔒 Riêng tư hơn', privateHint: 'Chạy trên Muse Spark Open qua Baseten, bên này công bố không lưu và không dùng yêu cầu của bạn để huấn luyện. Giọng nói vẫn đi qua Meta.',
         kindWork: 'Cam kết', kindLife: 'Cuộc sống',
         recording: 'AI đang bận, đây là bản ghi một lần chạy thật.',
+        fbQuote: 'Được trích dẫn góp ý này, không kèm tên tôi', fbRate: 'Bạn thấy có ích tới đâu?',
         callStop: 'Ngắt lời', whichOne: 'Bạn chọn cách nào?', consentYes: 'Tôi đồng ý', pastBedtime: 'Đã quá giờ ngủ. Mai tính tiếp nhé.',
         importTitle: 'Thêm đề cương', importIntro: 'Thêm PDF hoặc ảnh đề cương, lịch thi, tin nhắn. Muse Spark tìm các mốc thời gian, bạn chọn giữ lại gì.', importBtn: '📎 Thêm tệp', importSample: 'Thử đề cương mẫu',
         importing: 'Muse Spark đang đọc...', importEmpty: 'Không tìm thấy mốc thời gian nào.', importHint: 'Bỏ tích những gì bạn không muốn. Chưa có gì được thêm cho tới khi bạn xác nhận.', importEstimate: (h) => `khoảng ${h} giờ làm`, importAdd: (n) => `Thêm ${n} mục`, importDone: 'Đã thêm. Tab Tuần sẽ báo nếu có hạn nào gặp rủi ro.', importPrivate: 'PDF cần Muse Spark. Tắt Riêng tư hơn, hoặc thêm ảnh.',
@@ -514,13 +519,16 @@
 
     let stats;
     try { stats = JSON.parse(store.get('meso-stats')) || null; } catch { stats = null; }
-    stats = stats || { replans: 0, approvals: 0, doneMin: 0, debtRepaidMin: 0, days: [] };
+    stats = { replans: 0, approvals: 0, doneMin: 0, debtRepaidMin: 0, days: [], calls: 0, rescuedDays: [], ...stats };
     const saveStats = () => store.set('meso-stats', JSON.stringify(stats));
     function count(kind, minutes = 0) {
       if (mode !== 'real' || template?.sample) return;
       const d = today().date;
       if (!stats.days.includes(d)) stats.days.push(d);
-      if (kind === 'replan') stats.replans++;
+      if (kind === 'replan') { stats.replans++; stats.lastReplan = d; }
+      if (kind === 'call') stats.calls++;
+      // Rescued: the plan broke, it was re-planned, and work still got done that day.
+      if (kind === 'done' && stats.lastReplan === d && !stats.rescuedDays.includes(d)) stats.rescuedDays.push(d);
       if (kind === 'approve') stats.approvals++;
       if (kind === 'done') stats.doneMin += minutes;
       if (kind === 'repaid') stats.debtRepaidMin += minutes;
@@ -1460,6 +1468,7 @@
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch { $('status').textContent = t('noMic'); return; }
       showTab('today');
+      count('call');
       $('call').hidden = true;
       const ws = new WebSocket(voiceUrl('&call=1'));
       ws.binaryType = 'arraybuffer';
@@ -1816,10 +1825,16 @@
       location.reload();
     };
 
+    let fbRating = null;
+    function renderStars() {
+      $('fb-stars').innerHTML = [1, 2, 3, 4, 5].map((n) => `<button class="small ${fbRating === n ? 'primary' : ''}" role="radio" aria-checked="${fbRating === n}" data-n="${n}">${n}</button>`).join('') + `<span class="hint" style="margin:0">${t('fbRate')}</span>`;
+      $('fb-stars').querySelectorAll('button').forEach((b) => { b.onclick = () => { fbRating = Number(b.dataset.n); renderStars(); }; });
+    }
+    renderStars();
     $('fb-send').onclick = async () => {
       const text = $('fb-text').value.trim();
       if (!text) return;
-      try { await api('/api/feedback', { text, lang }); $('fb-text').value = ''; $('fb-status').textContent = t('thanks'); }
+      try { await api('/api/feedback', { text, lang, rating: fbRating, quote: $('fb-quote').checked }); $('fb-text').value = ''; $('fb-quote').checked = false; fbRating = null; renderStars(); $('fb-status').textContent = t('thanks'); }
       catch (e) { $('fb-status').textContent = e.message; }
     };
 

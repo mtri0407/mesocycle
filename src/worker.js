@@ -278,7 +278,8 @@ export default {
         const text = String(body.text || '').trim().slice(0, 2000);
         if (!text) return json({ ok: false, error: 'Empty feedback' }, 400);
         const key = `${new Date().toISOString()}-${crypto.randomUUID().slice(0, 8)}`;
-        await env.FEEDBACK.put(key, JSON.stringify({ text, lang: body.lang || '', rating: body.rating ?? null }));
+        const rating = Number.isInteger(body.rating) && body.rating >= 1 && body.rating <= 5 ? body.rating : null;
+        await env.FEEDBACK.put(key, JSON.stringify({ text, lang: String(body.lang || '').slice(0, 5), rating, quote: body.quote === true }));
         return json({ ok: true });
       }
 

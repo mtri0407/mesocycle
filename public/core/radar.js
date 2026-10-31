@@ -13,7 +13,10 @@ export function deadlineRadar(template, state, { date, weekday }) {
   const work = template.tasks
     .filter((t) => t.status === 'todo' && t.deadline)
     .sort((a, b) => a.deadline.localeCompare(b.deadline))
-    .map((t) => ({ t, left: adjustEstimate(t.minutes, pace[t.roleId] ?? 1).minutes, finish: null, short: null }));
+    .map((t) => {
+      const left = adjustEstimate(t.minutes, pace[t.roleId] ?? 1).minutes;
+      return { t, left, finish: null, short: t.deadline < date ? left : null }; // already overdue
+    });
   if (!work.length) return [];
 
   const settings = { wake: toMin(template.wake), sleep: sleepMinutes(template.wake, template.sleep) };
@@ -38,7 +41,7 @@ export function deadlineRadar(template, state, { date, weekday }) {
   }
 
   return work.map(({ t, left, finish, short }) => {
-    const shortMin = short ?? left; // a deadline already behind us never got a turn
+    const shortMin = short ?? (t.deadline >= day ? 0 : left); // past the horizon: too far away to judge
     return { id: t.id, title: t.title, date: t.deadline, ok: shortMin === 0, shortMin, finishDate: finish };
   });
 }
