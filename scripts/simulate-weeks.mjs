@@ -109,7 +109,7 @@ for (let run = 0; run < WEEKS / 4; run++) {
     }
     let state = out.state;
     counts.days++;
-    check(state, template, 'new day');
+    if (check(state, template, 'new day').needsUser) fail('a new day starts with more than fits', { date });
     checkRadar(template, state, date, weekday);
 
     for (let n = int(0, 6); n > 0; n--) {
