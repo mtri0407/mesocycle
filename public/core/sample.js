@@ -2,13 +2,7 @@
 // the trend chart in seconds, before typing anything. Nothing here is real and
 // the app labels it as a sample. Hours follow today's weekday so the numbers
 // look like a week in progress on any day.
-import { mondayOf } from './setup.js';
-
-const addDays = (date, n) => {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
+import { mondayOf, addDays } from './setup.js';
 
 const WORDS = {
   en: {

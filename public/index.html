@@ -102,7 +102,13 @@
     .chip.role { color: var(--fg); background: color-mix(in srgb, var(--rc) 16%, var(--card)); }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--rc); margin-right: 6px; flex: none; }
     .tl .blk { background: color-mix(in srgb, var(--rc, var(--accent)) 13%, var(--card)); border: 0; border-left: 3px solid var(--rc, var(--accent)); }
+    .bar { position: relative; display: flex; }
     .bar i, .bar.under i { background: var(--rc, var(--accent)); }
+    .bar i.plan { opacity: .4; }
+    .bar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--fg); opacity: .55; }
+    .warnbar { border-left-color: var(--warn); }
+    .diff { list-style: none; margin: 8px 0 0; padding: 0; font-size: 14px; }
+    .diff li { padding: 2px 0; }
     .day .it { border-left: 2px solid var(--rc, var(--line)); padding-left: 5px; }
     .day .debt { font-weight: 500; }
     .goal { padding: 12px 0; border-top: 1px solid var(--line); }
@@ -186,6 +192,7 @@
       <div class="hint" id="setup-status"></div>
     </section>
     <section class="card caption" id="checkin" hidden style="margin:0 0 14px"></section>
+    <section class="card caption warnbar" id="risk-bar" hidden style="margin:0 0 14px"></section>
     <section class="card now" id="now-card"></section>
     <section class="card" id="next-card"></section>
     <details class="card" id="tl-card" open>
@@ -295,6 +302,8 @@
     import { handlers } from '/core/handlers.js';
     import { replan } from '/core/planner.js';
     import { checkPlan } from '/core/invariants.js';
+    import { deadlineRadar } from '/core/radar.js';
+    import { planDiff, isEmptyDiff } from '/core/diff.js';
 
     const T = {
       en: {
@@ -326,7 +335,10 @@
         approved: 'Done. Moved to debt; it comes back when there is real free time.',
         steps: 'Agent steps', stepsHint: '✗ means the code refused a step that broke a rule; the agent read why and fixed it.',
         week: 'This week', of: 'of', floor: 'floor', debt: 'debt', onTrack: 'on track', short: 'short',
-        pace: (p, role) => `You usually take ${p}% longer on ${role}. New estimates include that.`,
+        pace: (role, m, b) => `Based on how long ${role} really takes you, this is planned at ${m} min instead of ${b}.`,
+        pullMore: 'Take one more block', weekLine: (d, n, g) => `${d}h done, ${n}h today, goal ${g}h`, weekKey: 'Dark bar: done. Light bar: planned today. Thin line: your weekly minimum.',
+        riskLine: (t, d, h) => `${t}, due ${d}, is ${h}h short.`, riskMore: (n) => `And ${n} more.`, riskFix: 'Sort it out', riskText: (t, d) => `The deadline for "${t}" on ${d} is at risk. What can give way?`,
+        due: 'due', noRoom: 'no room today', receipt: (n, r, a, b) => `Code checked ${n} step${n === 1 ? '' : 's'} and refused ${r}. ${a} of ${b} promises holding.`, undo: '↩ Undo', undone: 'Back to how it was.',
         feedback: 'Tried it? Send feedback', feedbackHint: 'What confused you, what helped, what is missing. The author reads every note.',
         send: 'Send', thanks: 'Thank you!',
         demoControls: 'Demo controls', clock: 'Clock', reset: 'Reset demo day',
@@ -396,7 +408,10 @@
         approved: 'Xong. Đã chuyển thành nợ, sẽ quay lại khi có giờ trống thật.',
         steps: 'Các bước của agent', stepsHint: '✗ nghĩa là code đã từ chối một bước phạm luật; agent đọc lý do và tự sửa.',
         week: 'Tuần này', of: 'trên', floor: 'tối thiểu', debt: 'nợ', onTrack: 'kịp', short: 'thiếu',
-        pace: (p, role) => `Bạn thường làm ${role} lâu hơn ${p}%. Ước lượng mới đã tính thêm.`,
+        pace: (role, m, b) => `Theo thời gian thật bạn làm ${role}, việc này được tính ${m} phút thay vì ${b} phút.`,
+        pullMore: 'Lấy thêm một việc', weekLine: (d, n, g) => `đã làm ${d}h, hôm nay ${n}h, mục tiêu ${g}h`, weekKey: 'Thanh đậm: đã làm. Thanh nhạt: dự kiến hôm nay. Vạch mảnh: mức tối thiểu tuần.',
+        riskLine: (t, d, h) => `${t}, hạn ${d}, đang thiếu ${h} giờ.`, riskMore: (n) => `Còn ${n} hạn khác.`, riskFix: 'Xử lý', riskText: (t, d) => `Hạn "${t}" ngày ${d} đang bị đe doạ. Có thể bỏ bớt gì?`,
+        due: 'hạn', noRoom: 'hôm nay không còn chỗ', receipt: (n, r, a, b) => `Code đã kiểm tra ${n} lệnh, từ chối ${r}. ${a} trên ${b} lời hứa đang giữ.`, undo: '↩ Hoàn tác', undone: 'Đã trả về như cũ.',
         feedback: 'Dùng thử rồi? Gửi góp ý', feedbackHint: 'Chỗ nào khó hiểu, chỗ nào có ích, còn thiếu gì. Tác giả đọc từng góp ý.',
         send: 'Gửi', thanks: 'Cảm ơn bạn!',
         demoControls: 'Điều khiển demo', clock: 'Đồng hồ', reset: 'Làm lại ngày demo',
@@ -613,8 +628,13 @@
 
     function apply(data) {
       if (data.template) { template = data.template; saveTemplate(); }
-      if (data.state) { state = data.state; store.set('meso-state', JSON.stringify(state)); }
+      if (data.state) state = data.state;
       if (data.view) view = data.view;
+      if (mode === 'real' && template && state) {
+        state.radar = deadlineRadar(template, state, { date: state.date, weekday: realDay() });
+        view.deadlines = state.radar;
+      }
+      store.set('meso-state', JSON.stringify(state));
       render();
       loadWeek();
       scheduleSave();
@@ -650,13 +670,10 @@
     const roleName = (id) => (view.roles.find((r) => r.id === id) || {}).name || id;
     const span = (q) => dayMin(q.end) - dayMin(q.start);
 
-    // Learned pace: median of real/estimated time per role, shown once there are 3 samples.
-    function paceLine(roleId) {
-      const r = (state.actuals || []).filter((a) => a.roleId === roleId).map((a) => a.actual / a.est).sort((a, b) => a - b);
-      if (r.length < 3) return '';
-      const mid = Math.floor(r.length / 2);
-      const p = Math.round(((r.length % 2 ? r[mid] : (r[mid - 1] + r[mid]) / 2) - 1) * 100);
-      return p >= 10 ? `<p class="hint">⏱ ${esc(t('pace')(p, roleName(roleId)))}</p>` : '';
+    // The estimate moved because of how long this role really takes the person.
+    function paceLine(item) {
+      const it = state.queue.find((q) => q.id === item.id);
+      return it?.base && it.minutes !== it.base ? `<p class="hint">⏱ ${esc(t('pace')(roleName(item.role), it.minutes, it.base))}</p>` : '';
     }
 
     let focus = null; // { id, end } of the item when it first became Now
@@ -702,7 +719,20 @@
       sl.textContent = `${view.sleep} 🌙`;
     }
 
+    const hasBacklog = () => mode === 'real' && !!template?.tasks.some((x) => x.status === 'todo' && !state.queue.some((q) => q.id === x.id));
+
+    function renderRisk() {
+      const box = $('risk-bar');
+      const risks = mode === 'real' ? (view.deadlines || []).filter((d) => !d.ok) : [];
+      box.hidden = !risks.length;
+      if (box.hidden) return;
+      const first = risks[0];
+      box.innerHTML = `<div class="row" style="justify-content:space-between"><span>⚠ ${esc(t('riskLine')(first.title, first.date.slice(8, 10) + '/' + first.date.slice(5, 7), hrs(first.shortMin)))}${risks.length > 1 ? ` ${t('riskMore')(risks.length - 1)}` : ''}</span><button class="primary small" id="risk-go">${t('riskFix')}</button></div>`;
+      $('risk-go').onclick = () => { $('say').value = t('riskText')(first.title, first.date); send(); };
+    }
+
     function render() {
+      renderRisk();
       $('date').textContent = `${mode === 'real' ? t('today') : t('date')}, ${view.now}`;
       $('clock').value = view.now;
       const [now, ...next] = view.queue;
@@ -720,8 +750,9 @@
           <button data-act="more">${t('more')}</button>
           <button data-act="skip">${t('skip')}</button>
         </div>
-        <p class="hint">${t('nowHint')}</p>${paceLine(now.role)}` : `<h2>${t('now')}</h2><div class="now-title">${t('nothingLeft')}</div>
-        <p class="hint">${t('debtNote')}</p>`;
+        <p class="hint">${t('nowHint')}</p>${paceLine(now)}` : `<h2>${t('now')}</h2><div class="now-title">${t('nothingLeft')}</div>
+        <p class="hint">${t('debtNote')}</p>${hasBacklog() ? `<button class="primary" id="pull-more">${t('pullMore')}</button>` : ''}`;
+      if (!now && hasBacklog()) $('pull-more').onclick = async () => apply(await api('/api/more', { template, state }));
       if (now) $('now-card').querySelectorAll('button[data-act]').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
       if (banner) {
         const late = state.now - focus.end;
@@ -737,12 +768,15 @@
       renderTimeline();
       renderPromises();
       const debt = view.debtMinutes;
-      $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
-        const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
-        const pct = Math.min(100, Math.round(have / r.floorMin * 100));
-        return `<div class="floor" style="${rcStyle(r.id)}"><span><span class="dot"></span>${esc(r.name)}</span><span class="muted">${(have / 60).toFixed(1)}h ${t('of')} ${r.floorMin / 60}h ${t('floor')}${debt[r.id] ? `, ${(debt[r.id] / 60).toFixed(1)}h ${t('debt')}` : ''}</span>
-          <div class="bar ${have < r.floorMin ? 'under' : ''}" style="grid-column:1/3"><i style="width:${pct}%"></i></div></div>`;
-      }).join('') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${Math.round(d.shortMin / 60)}h`}</p>`).join('');
+      $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin || r.targetMin).map((r) => {
+        const done = r.weekSoFarMin;
+        const today = view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
+        const goal = r.targetMin || r.floorMin;
+        const scale = Math.max(goal, done + today, 1);
+        const pct = (m) => Math.round((m / scale) * 100);
+        return `<div class="floor" style="${rcStyle(r.id)}"><span><span class="dot"></span>${esc(r.name)}</span><span class="muted">${t('weekLine')(hrs(done), hrs(today), hrs(goal))}${debt[r.id] ? `, ${hrs(debt[r.id])}h ${t('debt')}` : ''}</span>
+          <div class="bar" style="grid-column:1/3"><i style="width:${pct(done)}%"></i><i class="plan" style="width:${pct(today)}%"></i>${r.floorMin ? `<b class="tick" style="left:${pct(r.floorMin)}%" title="${t('floor')} ${hrs(r.floorMin)}h"></b>` : ''}</div></div>`;
+      }).join('') + (view.roles.some((r) => r.floorMin) ? `<p class="hint">${t('weekKey')}</p>` : '') + view.deadlines.map((d) => `<p style="margin:8px 0 0" class="${d.ok ? 'muted' : 'warn'}">${esc(d.title)}: ${d.ok ? t('onTrack') : `${t('short')} ${hrs(d.shortMin)}h`}</p>`).join('');
     }
 
     function recordDone(id, roleId, minutes) {
@@ -1406,8 +1440,11 @@
         }
         if (!done || !done.ok) throw new Error(done?.error || 'No answer');
         const before = state;
+        const beforeWeek = template;
+        undoStack.push(snapshot());
         apply(done);
         syncAgent(before);
+        done.receipt = receiptHtml(before, beforeWeek, done);
         count('replan');
         chatLog.push({ role: 'user', content: text }, { role: 'assistant', content: done.reply });
         pendingProposal = done.proposal || null;
@@ -1427,24 +1464,63 @@
 
     const stepHtml = (s) => `<li><span class="${s.ok ? 'ok' : 'no'}">${s.ok ? '✓' : '✗'}</span> ${esc(t('tool')[s.tool] || s.tool)}${s.error ? `: <span class="no">${esc(s.error)}</span>` : ''}</li>`;
 
+    // What changed according to the code, not according to the model.
+    function receiptHtml(before, beforeWeek, data) {
+      const d = planDiff(before, state, beforeWeek, data.template || null);
+      const rows = [
+        ...d.fixedAdded.map((x) => `+ ${esc(x.title)}, ${x.start}`),
+        ...d.added.map((x) => `+ ${esc(x.title)}, ${x.start}`),
+        ...d.laterTasks.map((x) => `+ ${esc(x.title)}${x.deadline ? ` (${t('due')} ${x.deadline.slice(8, 10)}/${x.deadline.slice(5, 7)})` : ''}`),
+        ...d.laterEvents.map((x) => `+ ${esc(x.title)}${x.on ? `, ${x.on.slice(8, 10)}/${x.on.slice(5, 7)}` : ''} ${x.start}`),
+        ...d.goals.map((x) => `+ ${t('goalsTab')}: ${esc(x.title)}`),
+        ...d.finished.map((x) => `✓ ${esc(x)}`),
+        ...d.toDebt.map((x) => `↩ ${esc(x)}`),
+        ...d.moved.slice(0, 4).map((x) => `→ ${esc(x.title)}: ${x.from} → ${x.to}`),
+        ...(d.moved.length > 4 ? [`→ +${d.moved.length - 4} ${t('moreN')}`] : []),
+        ...d.noRoom.map((x) => `! ${esc(x)}: ${t('noRoom')}`),
+      ];
+      const broken = checkPlan(state, replan(state)).length;
+      const rejected = data.trace.filter((s) => !s.ok).length;
+      return `${rows.length ? `<ul class="diff">${rows.map((r) => `<li>${r}</li>`).join('')}</ul>` : ''}
+        <p class="hint">${broken ? '✗' : '✓'} ${t('receipt')(data.trace.length, rejected, t('promises').length - Math.min(broken, 8), t('promises').length)}</p>
+        ${isEmptyDiff(d) ? '' : `<button class="small" id="undo">${t('undo')}</button>`}`;
+    }
+
+    // Anything the AI changed can be taken back.
+    const undoStack = [];
+    const snapshot = () => ({ state: JSON.stringify(state), template: JSON.stringify(template) });
+    async function undo() {
+      const s = undoStack.pop();
+      if (!s) return;
+      template = JSON.parse(s.template);
+      if (template) saveTemplate();
+      state = JSON.parse(s.state);
+      pendingProposal = null;
+      await refresh();
+      $('answer').innerHTML = `<p class="reply muted">${t('undone')}</p>`;
+    }
+
     function showAnswer(data) {
       const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
       const p = data.proposal;
       $('live-steps').innerHTML = '';
-      $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>` +
+      $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
         (p ? p.options.map((ids, i) => `<div class="option"><strong>${i === 0 ? t('suggested') : t('or')}</strong>: ${t('moveToDebt')}
           <ul>${ids.map((id) => `<li>${esc(title(id))}</li>`).join('')}</ul>
           <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
         `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
           <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
+      if ($('undo')) $('undo').onclick = undo;
       if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
         b.onclick = async () => {
           const ids = p.options[Number(b.dataset.opt)];
+          undoStack.push(snapshot());
           apply(await api('/api/approve', { state, ids }));
           pendingProposal = null;
           count('approve');
           if (mode === 'real' && template) { for (const id of ids) { const task = template.tasks.find((x) => x.id === id); if (task) task.debt = true; } saveTemplate(); }
-          $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p>`;
+          $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p><button class="small" id="undo">${t('undo')}</button>`;
+          $('undo').onclick = undo;
         };
       });
     }

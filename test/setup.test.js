@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, validateNext, adoptNext, checkTemplate } from '../public/core/setup.js';
+import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, pullNext, validateNext, adoptNext, checkTemplate } from '../public/core/setup.js';
 import { replan } from '../public/core/planner.js';
 import { runWeekTool } from '../public/core/week-tools.js';
+import { deadlineRadar } from '../public/core/radar.js';
+import { planDiff } from '../public/core/diff.js';
 import { runAgent } from '../src/agent.js';
 import { sampleWeek } from '../public/core/sample.js';
 import { checkPlan } from '../public/core/invariants.js';
@@ -55,7 +57,7 @@ test('the week forecast places the rest of the work on later days, each day keep
 });
 
 const tpl = (over = {}) => ({ ...validateWeek(week()).template, weekStart: '2026-11-02', ...over });
-const day3 = (t) => buildDay(t, { date: '2026-11-03', weekday: 2, now: 11 * 60 });
+const day3 = (t) => buildDay(t, { date: '2026-11-03', weekday: 2, now: 11 * 60, spread: false });
 
 test('goals must point at a real role, and are optional', () => {
   assert.deepEqual(validateWeek(week()).template.goals, []);
@@ -281,4 +283,111 @@ test('bedtime after midnight is a longer day, not an error', () => {
   assert.deepEqual(checkTemplate(template), []);
   assert.ok(validateWeek(week({ sleep: '05:00' })).errors.length); // that is a morning, not a bedtime
   assert.ok(checkTemplate({ ...template, sleep: '06:00' }).length);
+});
+
+const minutesOn = (d) => d.items.reduce((s, i) => s + i.minutes, 0);
+
+test('work spreads across the week instead of piling up at the start', () => {
+  const t = tpl();
+  const monday = buildDay(t, { date: '2026-11-02', weekday: 1, now: 7 * 60 });
+  const planned = monday.queue.reduce((s, q) => s + q.minutes, 0);
+  assert.ok(planned <= 3 * 60, `${planned} min on Monday`);
+  assert.ok(planned >= 60);
+  const f = forecastWeek(t, { weekday: 1, date: '2026-11-02', exclude: monday.queue.map((q) => q.id) });
+  assert.ok(f.days.filter((d) => minutesOn(d) > 0).length >= 5, 'most days get work');
+  assert.ok(minutesOn(f.days.at(-1)) > 0, 'Sunday is not empty');
+});
+
+test('the old way is one option away, and the 60% ceiling still holds', () => {
+  const t = tpl();
+  const packed = buildDay(t, { date: '2026-11-02', weekday: 1, now: 7 * 60, spread: false });
+  const spread = buildDay(t, { date: '2026-11-02', weekday: 1, now: 7 * 60 });
+  assert.ok(packed.queue.length > spread.queue.length);
+  assert.deepEqual(checkPlan(spread, replan(spread)), []);
+});
+
+test('work due tomorrow joins today no matter the share', () => {
+  const { template } = add(tpl(), 'add_task', { title: 'Due tomorrow', role: 'r2', minutes: 120, rank: '3', deadline: '2026-11-04' });
+  const day = buildDay(template, { date: '2026-11-03', weekday: 2, now: 11 * 60 });
+  assert.ok(day.queue.some((q) => q.title === 'Due tomorrow'));
+});
+
+test('finished early: one more block comes from the backlog', () => {
+  const t = tpl();
+  const day = buildDay(t, { date: '2026-11-03', weekday: 2, now: 11 * 60 });
+  const before = day.queue.length;
+  const more = pullNext(t, day);
+  assert.equal(more.queue.length, before + 1);
+  assert.equal(new Set(more.queue.map((q) => q.id)).size, more.queue.length);
+});
+
+test('estimates follow how long a role really takes, and say why', () => {
+  const actuals = [{ roleId: 'r1', est: 120, actual: 150 }, { roleId: 'r1', est: 60, actual: 75 }, { roleId: 'r1', est: 90, actual: 110 }];
+  const day = buildDay(tpl({ actuals }), { date: '2026-11-03', weekday: 2, now: 11 * 60, spread: false });
+  const item = day.queue.find((q) => q.roleId === 'r1');
+  assert.equal(item.base, 120);
+  assert.equal(item.estimate, 120);
+  assert.equal(item.minutes, 150);
+  assert.equal(buildDay(tpl({ actuals: actuals.slice(0, 2) }), { date: '2026-11-03', weekday: 2, now: 11 * 60, spread: false }).queue[0].minutes, 120);
+});
+
+const radarFor = (t, now = 11 * 60) => deadlineRadar(t, buildDay(t, { date: '2026-11-03', weekday: 2, now }), { date: '2026-11-03', weekday: 2 });
+
+test('radar: a deadline with room is safe, and says when it will finish', () => {
+  const { template } = add(tpl(), 'add_task', { title: 'Report', role: 'r1', minutes: 120, rank: '1', deadline: '2026-11-06' });
+  const [r] = radarFor(template);
+  assert.equal(r.ok, true);
+  assert.equal(r.shortMin, 0);
+  assert.equal(r.finishDate, '2026-11-03');
+});
+
+test('radar: too much for the time left says exactly how much is missing', () => {
+  let t = tpl();
+  for (let i = 0; i < 6; i++) t = add(t, 'add_task', { title: `Part ${i}`, role: 'r1', minutes: 180, rank: '1', deadline: '2026-11-03' }).template;
+  const rows = radarFor(t, 20 * 60);
+  assert.ok(rows.some((r) => !r.ok));
+  const budget = replan(buildDay(t, { date: '2026-11-03', weekday: 2, now: 20 * 60 })).budgetMin;
+  assert.equal(rows.reduce((s, r) => s + r.shortMin, 0), 6 * 180 - budget);
+});
+
+test('radar: earliest deadline first, a day of classes counts, past deadlines are flagged', () => {
+  const t0 = tpl({ fixed: [{ id: 'f1', title: 'All day', days: [3], start: '07:00', end: '23:00' }] });
+  const { template } = add(t0, 'add_task', { title: 'Wednesday only', role: 'r1', minutes: 60, rank: '1', deadline: '2026-11-04' });
+  const blocked = deadlineRadar(template, { ...buildDay(template, { date: '2026-11-03', weekday: 2, now: 23 * 60 }) }, { date: '2026-11-03', weekday: 2 });
+  assert.equal(blocked[0].ok, false);
+  assert.equal(blocked[0].shortMin, 60);
+  const late = { ...tpl(), tasks: [{ id: 't1', title: 'Old', roleId: 'r1', minutes: 60, rank: 1, status: 'todo', deadline: '2026-10-01' }] };
+  assert.equal(radarFor(late)[0].ok, false);
+});
+
+test('the agent reads the radar, so it cannot claim a deadline is safe when it is not', async () => {
+  let seen = '';
+  const t = tpl();
+  const state = buildDay(t, { date: '2026-11-03', weekday: 2, now: 22 * 60 });
+  const model = async (messages) => {
+    seen = messages.at(-1).content;
+    return messages.at(-1).role === 'tool' ? { text: 'done', toolCalls: [], message: {} } : { text: '', toolCalls: [{ id: '1', name: 'add_task', args: { title: 'Huge', role: 'r1', minutes: 180, rank: '1', deadline: '2026-11-03' } }], message: {} };
+  };
+  await runAgent({ state, userText: 'x', chatFn: model, template: t, weekday: 2 });
+  const plan = JSON.parse(seen);
+  assert.equal(plan.deadlines[0].title, 'Huge');
+  assert.equal(plan.deadlines[0].ok, false);
+  assert.ok(plan.deadlines[0].shortMin > 0);
+});
+
+test('the diff comes from the plans: moved, added, debt, new work for later', () => {
+  const t = tpl();
+  const before = day3(t);
+  const late = { ...before, now: before.now + 30, fixed: [...before.fixed, { id: 'fix-9', title: 'Meeting', start: 12 * 60, end: 13 * 60 }], queue: before.queue.map((q, i) => (i === 1 ? { ...q, status: 'cut' } : q)) };
+  const next = add(t, 'add_task', { title: 'Later', role: 'r1', minutes: 60, rank: '1', deadline: '2026-11-20' }).template;
+  const d = planDiff(before, late, t, next);
+  assert.deepEqual(d.fixedAdded.map((x) => x.title), ['Meeting']);
+  assert.deepEqual(d.toDebt, [before.queue[1].title]);
+  assert.ok(d.moved.length > 0);
+  assert.deepEqual(d.laterTasks.map((x) => x.title), ['Later']);
+  assert.deepEqual(planDiff(before, before).moved, []);
+});
+
+test('on Sunday the week is over: nothing is forecast past it', () => {
+  assert.deepEqual(forecastWeek(tpl(), { weekday: 0 }).days, []);
 });

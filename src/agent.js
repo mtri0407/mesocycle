@@ -3,6 +3,7 @@
 import { TOOLS, runTool } from '../public/core/tools.js';
 import { WEEK_TOOLS, WEEK_TOOL_NAMES, ACCEPT_TOOL, runWeekTool } from '../public/core/week-tools.js';
 import { rebaseDay } from '../public/core/setup.js';
+import { deadlineRadar } from '../public/core/radar.js';
 import { applyEvent } from '../public/core/planner.js';
 
 export const SYSTEM_PROMPT = `You are Mesocycle, a planning agent. You protect the user's deadlines and
@@ -56,6 +57,9 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // template and pending are only there for a real week: template unlocks the
 // tools that reach past today, pending is a proposal waiting for an answer.
 export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false }) {
+  // The agent reads deadline risk from code; it never estimates it.
+  const withRadar = (s) => (template ? { ...s, radar: deadlineRadar(template, s, { date: s.date, weekday }) } : s);
+  state = withRadar(state);
   // Sending the plan up front saves one model round trip (a get_state call).
   const plan = runTool(state, 'get_state', {}).result;
   const title = (id) => state.queue.find((i) => i.id === id)?.title || id;
@@ -86,7 +90,7 @@ ${JSON.stringify(plan)}`;
         if (res.ok) {
           template = res.template;
           changedWeek = true;
-          state = rebaseDay(template, state, { weekday });
+          state = withRadar(rebaseDay(template, state, { weekday }));
           res = { ...res, state, result: runTool(state, 'get_state', {}).result };
         }
       } else if (pending && call.name === 'accept_proposal') {

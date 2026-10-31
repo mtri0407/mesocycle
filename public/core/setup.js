@@ -1,7 +1,7 @@
 // "Set up my week in 60 seconds": the user describes their week (voice or
 // text, optionally a timetable photo). Muse Spark answers with one build_week
 // tool call; code checks it and builds today's plan from it.
-import { replan, toMin, freeWindows, sleepMinutes, sleepIsValid } from './planner.js';
+import { replan, toMin, freeWindows, sleepMinutes, sleepIsValid, learnPace, adjustEstimate } from './planner.js';
 
 export const SETUP_PROMPT = `You turn a person's description of their week into a plan template
 by calling build_week exactly once.
@@ -119,18 +119,57 @@ function openTasks(template) {
     .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999') || prio(a.roleId) - prio(b.roleId) || rank[a.rank] - rank[b.rank]);
 }
 
-const toItem = (t) => ({ id: t.id, title: t.title, roleId: t.roleId, minutes: t.minutes, base: t.minutes, rank: t.rank, status: 'todo' });
+// An estimate follows how long this role really takes the person. base is the
+// planned length, estimate the number actual time is compared against.
+const toItem = (t, pace) => ({
+  id: t.id, title: t.title, roleId: t.roleId, rank: t.rank, status: 'todo',
+  minutes: adjustEstimate(t.minutes, pace[t.roleId] ?? 1).minutes, base: t.minutes, estimate: t.minutes,
+});
+
+export function addDays(date, n) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export const fixedOn = (template, weekday, date) => template.fixed
+  .filter((f) => (f.on && date ? f.on === date : f.days.includes(weekday)))
+  .map((f) => ({ id: f.id, title: f.title, start: toMin(f.start), end: toMin(f.end) }));
+
+// Today's fair share of each role's open work, in proportion to the free time
+// left this week. Without it every day fills to the 60% limit and the end of
+// the week stands empty, which is planning a future that will not happen.
+function dayShare(template, { date, weekday, now }) {
+  const settings = { wake: toMin(template.wake), sleep: sleepMinutes(template.wake, template.sleep) };
+  const free = (from, wd, day) => freeWindows(from, fixedOn(template, wd, day), settings).reduce((s, [a, b]) => s + b - a, 0);
+  const today = free(now, weekday, date);
+  let later = 0;
+  for (let i = 1; i <= (7 - weekday) % 7; i++) later += free(settings.wake, (weekday + i) % 7, date ? addDays(date, i) : '');
+  const ratio = today + later ? today / (today + later) : 0;
+  const share = {};
+  for (const t of template.tasks) if (t.status === 'todo') share[t.roleId] = (share[t.roleId] || 0) + t.minutes * ratio;
+  return share;
+}
 
 // Adds tasks to the queue one by one while the day still fits without a cut.
-function fill(state, tasks) {
+// With a share, a role stops once it has about its part for today; work due by
+// tomorrow joins regardless. A block joins when at least half of it is due.
+function fill(state, tasks, { pace, share = null, soon = null, limit = Infinity }) {
+  let added = 0;
   for (const t of tasks) {
-    const trial = { ...state, queue: [...state.queue, toItem(t)] };
-    if (!replan(trial).needsUser) state.queue = trial.queue;
+    if (added >= limit) break;
+    const urgent = soon && t.deadline && t.deadline <= soon;
+    if (share && !urgent && (share[t.roleId] || 0) < t.minutes / 2) continue;
+    const trial = { ...state, queue: [...state.queue, toItem(t, pace)] };
+    if (replan(trial).needsUser) continue;
+    state.queue = trial.queue;
+    added++;
+    if (share) share[t.roleId] = (share[t.roleId] || 0) - t.minutes;
   }
   return state;
 }
 
-export function buildDay(template, { date, weekday, now }) {
+export function buildDay(template, { date, weekday, now, spread = true }) {
   const daysLeft = (7 - weekday) % 7; // days after today until the week ends on Sunday
   const state = {
     date,
@@ -141,23 +180,33 @@ export function buildDay(template, { date, weekday, now }) {
     week: Object.fromEntries(template.roles.map((r) => [r.id, {
       done: template.done?.[r.id] || 0, futureBudget: 0, laterMin: Math.round((r.floorMin * daysLeft) / 7),
     }])),
-    fixed: template.fixed.filter((f) => (f.on && date ? f.on === date : f.days.includes(weekday))).map((f) => ({ id: f.id, title: f.title, start: toMin(f.start), end: toMin(f.end) })),
+    fixed: fixedOn(template, weekday, date),
     queue: [],
     deadlines: [],
     actuals: template.actuals || [],
   };
-  return fill(state, openTasks(template));
+  return fill(state, openTasks(template), {
+    pace: learnPace(template.actuals || []),
+    share: spread ? dayShare(template, { date, weekday, now }) : null,
+    soon: date ? addDays(date, 1) : null,
+  });
+}
+
+// Finished early: one more block from the backlog, if it fits.
+export function pullNext(template, state) {
+  const next = { ...state, queue: [...state.queue] };
+  return fill(next, openTasks(template).filter((t) => !state.queue.some((q) => q.id === t.id)), { pace: learnPace(template.actuals || []), limit: 1 });
 }
 
 // A forecast for the rest of the week: where open work (including today's
 // debt) would land if every later day started fresh. It is only a preview;
 // each morning the real day is planned again from what actually happened.
-export function forecastWeek(template, { weekday, exclude = [] }) {
+export function forecastWeek(template, { weekday, date = '', exclude = [] }) {
   const days = [];
   let tasks = template.tasks.map((t) => ({ ...t, status: exclude.includes(t.id) ? 'done' : t.status }));
-  for (let d = weekday + 1; d <= 7; d++) {
+  for (let d = weekday + 1; weekday !== 0 && d <= 7; d++) { // weeks end on Sunday
     const wd = d % 7;
-    const day = buildDay({ ...template, tasks }, { date: '', weekday: wd, now: toMin(template.wake) });
+    const day = buildDay({ ...template, tasks }, { date: date ? addDays(date, d - weekday) : '', weekday: wd, now: toMin(template.wake) });
     const placed = replan(day).placed;
     const ids = new Set(placed.map((p) => p.id));
     days.push({
@@ -196,8 +245,12 @@ export function rebaseDay(template, state, { weekday }) {
   const fresher = openTasks(template).filter((t) => !queue.some((q) => q.id === t.id));
   // Work due today joins even if the day is full, so the user is asked what
   // gives way instead of the deadline slipping quietly.
-  next.queue = [...queue, ...fresher.filter((t) => t.deadline && t.deadline <= state.date).map(toItem)];
-  return fill(next, fresher.filter((t) => !next.queue.some((q) => q.id === t.id)));
+  const pace = learnPace(template.actuals || []);
+  next.queue = [...queue, ...fresher.filter((t) => t.deadline && t.deadline <= state.date).map((t) => toItem(t, pace))];
+  // Today's share, less what is already in the queue.
+  const share = dayShare(template, { date: state.date, weekday, now: state.now });
+  for (const q of next.queue) if (q.status === 'todo') share[q.roleId] = (share[q.roleId] || 0) - q.minutes;
+  return fill(next, fresher.filter((t) => !next.queue.some((q) => q.id === t.id)), { pace, share, soon: addDays(state.date, 1) });
 }
 
 // Monday of the week a date is in. Weeks run Monday to Sunday.
@@ -436,6 +489,7 @@ export function checkinBrief(t, view, { weekday, date }) {
   const pace = new Map(goalPace(t, { weekday, date }).map((g) => [g.id, g]));
   return JSON.stringify({
     first: view.queue.slice(0, 3).map((q) => ({ title: q.title, start: q.start })),
+    deadlinesAtRisk: (view.deadlines || []).filter((d) => !d.ok).map((d) => ({ title: d.title, date: d.date, shortMinutes: d.shortMin })),
     fixedToday: view.fixed.map((f) => ({ title: f.title, start: f.start })),
     doesNotFit: view.doesNotFit.map((x) => x.title),
     debt: debtTasks(t).map((x) => ({ title: x.title, minutes: x.minutes })),

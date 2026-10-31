@@ -105,8 +105,8 @@ function summary(state) {
     usedMin: plan.usedMin,
     floorAtRisk: plan.floorBreaches,
     debtMinutes: debtByRole(state.queue),
-    roles: state.roles.map((r) => ({ id: r.id, name: r.name, priority: r.priority, floorMin: r.floorMin || 0, weekSoFarMin: (state.week[r.id]?.done) || 0 })),
-    deadlines: (state.deadlines || []).map((d) => ({ title: d.title, date: d.date, ...deadlineRisk({ needMin: d.remainingMin, days: d.days, fillRatio: { ...DEFAULT_SETTINGS, ...state.settings }.fillRatio }) })),
+    roles: state.roles.map((r) => ({ id: r.id, name: r.name, priority: r.priority, floorMin: r.floorMin || 0, targetMin: r.targetMin || 0, weekSoFarMin: (state.week[r.id]?.done) || 0 })),
+    deadlines: state.radar ? state.radar.map(({ title, date, ok, shortMin, finishDate }) => ({ title, date, ok, shortMin, finishDate })) : (state.deadlines || []).map((d) => ({ title: d.title, date: d.date, ...deadlineRisk({ needMin: d.remainingMin, days: d.days, fillRatio: { ...DEFAULT_SETTINGS, ...state.settings }.fillRatio }) })),
   };
 }
 

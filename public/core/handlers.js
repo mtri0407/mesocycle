@@ -4,7 +4,7 @@
 import { runTool } from './tools.js';
 import { applyEvent, replan, toHHMM } from './planner.js';
 import { demoState } from './demo-state.js';
-import { buildDay, forecastWeek, rollover, rebaseDay, adoptNext, goalPace, weekReview, checkTemplate } from './setup.js';
+import { buildDay, forecastWeek, rollover, rebaseDay, adoptNext, goalPace, weekReview, checkTemplate, pullNext } from './setup.js';
 import { sampleWeek } from './sample.js';
 
 export const view = (state) => runTool(state, 'get_state', {}).result;
@@ -51,6 +51,12 @@ export const handlers = {
     return { ok: true, template: edited, state: updated, view: view(updated) };
   },
 
+  // Finished early: one more block from the backlog.
+  '/api/more': ({ template, state }) => {
+    const next = pullNext(template, state);
+    return { ok: true, state: next, view: view(next) };
+  },
+
   // Rest-of-week forecast: where today's debt and open work would land.
   // Demo mode has no weekly template, so today's debt is the backlog.
   '/api/week': ({ state, template, weekday, date }) => {
@@ -66,7 +72,7 @@ export const handlers = {
     const done = state.queue.filter((q) => q.status === 'done').map((q) => q.id);
     return {
       ok: true,
-      ...forecastWeek(week, { weekday, exclude: [...placed, ...done] }),
+      ...forecastWeek(week, { weekday, date: template ? date : '', exclude: [...placed, ...done] }),
       ...(template ? { review: weekReview(template), goals: goalPace(template, { weekday, date }) } : {}),
     };
   },
