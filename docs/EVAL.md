@@ -4,8 +4,8 @@
 
 | Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn |
 |---|---|---|---|---|---|---|
-| Muse Spark 1.3 | 40 | 40/40 | 0 | 3.4s | 5.6s | $0.0048 |
-| Muse Spark Open | 40 | 40/40 | 0 | 4.2s | 8.6s | n/a |
+| Muse Spark 1.3 | 40 | 40/40 | 0 | 3.3s | 7.5s | $0.0051 |
+| Muse Spark Open | 40 | 40/40 | 0 | 3.7s | 7.8s | n/a |
 
 | Group | Cases | Muse Spark 1.3 | Muse Spark Open |
 |---|---|---|---|

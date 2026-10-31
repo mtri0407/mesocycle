@@ -4,6 +4,7 @@ import { replan, applyEvent } from '/core/planner.js';
 import { checkPlan } from '/core/invariants.js';
 import { deadlineRadar } from '/core/radar.js';
 import { runWeekTool } from '/core/week-tools.js';
+import { parseIcs } from '/core/ics.js';
 import { T } from '/js/strings.js';
 import { micFrames, beep, toWav } from '/js/audio.js';
 import { planDiff, isEmptyDiff } from '/core/diff.js';
@@ -560,7 +561,7 @@ function renderReview() {
     <p class="hint">${t('nextLine')(nextPlan.tasks.length)}</p>
     <div class="row"><button class="primary" id="next-ok">${t('approve')}</button><button id="next-no">${t('cancel')}</button></div>` : '';
   box.innerHTML = `<h2>${closed ? t('reviewLast') : t('reviewTitle')}</h2>${reviewHtml(r)}
-    ${nextPlan ? plan : `<div class="row"><button class="primary" id="next-go">${t('nextBtn')}</button>${closed ? `<button id="review-skip">${t('keepWeek')}</button>` : `<button class="small" id="review-close">${t('hideIntro')}</button>`}</div>`}
+    ${nextPlan ? plan : `<div class="row"><button class="primary" id="next-go">${t('nextBtn')}</button><button id="share-week">${t('recapBtn')}</button>${closed ? `<button id="review-skip">${t('keepWeek')}</button>` : `<button class="small" id="review-close">${t('hideIntro')}</button>`}</div>`}
     <div class="hint" id="next-status"></div>`;
   if (nextPlan) {
     $('next-ok').onclick = () => approveNext(closed);
@@ -568,8 +569,52 @@ function renderReview() {
     return;
   }
   $('next-go').onclick = () => planNext(r);
+  $('share-week').onclick = () => shareWeek(r);
   if (closed) $('review-skip').onclick = () => { template.reviewedWeek = closed.weekStart; saveTemplate(); scheduleSave(); renderExtras(); };
   else $('review-close').onclick = () => { reviewOpen = false; renderReview(); };
+}
+
+// A picture of the week to share. Hours and rules only, never task names.
+async function shareWeek(r) {
+  const size = 1080;
+  const c = Object.assign(document.createElement('canvas'), { width: size, height: size });
+  const g = c.getContext('2d');
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const font = (px, weight = 400) => `${weight} ${px}px Inter, system-ui, sans-serif`;
+  g.fillStyle = css('--bg');
+  g.fillRect(0, 0, size, size);
+  g.fillStyle = css('--fg');
+  g.font = font(44, 700);
+  g.fillText('Mesocycle', 80, 120);
+  g.font = font(76, 700);
+  g.fillText(t('recapTitle'), 80, 230);
+  let y = 330;
+  r.roles.slice(0, 6).forEach((x, i) => {
+    const top = Math.max(x.targetMin, x.doneMin, 1);
+    g.fillStyle = css('--fg');
+    g.font = font(36, 500);
+    g.fillText(x.name.slice(0, 26), 80, y);
+    g.fillStyle = css('--muted');
+    g.font = font(32);
+    g.textAlign = 'right';
+    g.fillText(`${hrs(x.doneMin)}h / ${hrs(x.targetMin)}h`, size - 80, y);
+    g.textAlign = 'left';
+    g.fillStyle = css('--chip');
+    g.fillRect(80, y + 20, size - 160, 18);
+    g.fillStyle = css(`--r${i % 8}`);
+    g.fillRect(80, y + 20, (size - 160) * (x.doneMin / top), 18);
+    y += 104;
+  });
+  const kept = r.roles.filter((x) => x.floorMin && x.floorKept).length;
+  const floors = r.roles.filter((x) => x.floorMin).length;
+  g.fillStyle = css('--fg');
+  g.font = font(38, 600);
+  g.fillText(t('recapSleep'), 80, size - 150);
+  if (floors) g.fillText(t('recapFloors')(kept, floors), 80, size - 92);
+  const blob = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+  const file = new File([blob], 'my-week-mesocycle.png', { type: 'image/png' });
+  if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text: t('recapText') }).catch(() => {}); return; }
+  Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: file.name }).click();
 }
 
 async function planNext(review) {
@@ -738,6 +783,13 @@ $('edit-cancel').onclick = () => { draft = null; $('edit-bar').hidden = true; re
 let importList = null;
 const readAsDataUrl = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
 async function importDoc(file, name) {
+  // A calendar file is read right here: nothing leaves the device.
+  if (/\.ics$/i.test(name) || file.type === 'text/calendar') {
+    const items = parseIcs(await file.text(), state.date);
+    $('import-status').textContent = items.length ? '' : t('importEmpty');
+    if (items.length) { importList = items.map((x) => ({ ...x, keep: true })); renderImport(); }
+    return;
+  }
   if (!(await askConsent())) return;
   const note = $('import-status');
   note.textContent = t('importing');
@@ -764,7 +816,7 @@ function renderImport() {
   if (!importList) return;
   const shortDate = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
   box.innerHTML = `<h2>${t('importTitle')}</h2><p class="hint" style="margin-top:0">${t('importHint')}</p>
-    ${importList.map((x, i) => `<label class="pick"><input type="checkbox" data-i="${i}" ${x.keep ? 'checked' : ''}><span><b>${esc(x.title)}</b><br><span class="hint">${shortDate(x.date)}${x.kind === 'event' ? `, ${x.start} - ${x.end}` : `, ${t('importEstimate')(hrs(x.minutes))}`}</span></span></label>`).join('')}
+    ${importList.map((x, i) => `<label class="pick"><input type="checkbox" data-i="${i}" ${x.keep ? 'checked' : ''}><span><b>${esc(x.title)}</b><br><span class="hint">${x.kind === 'weekly' ? `${x.days.map((d) => t('days')[d]).join(', ')}, ${x.start} - ${x.end}` : ''}${x.kind === 'weekly' ? '' : shortDate(x.date)}${x.kind === 'weekly' ? '' : x.kind === 'event' ? `, ${x.start} - ${x.end}` : `, ${t('importEstimate')(hrs(x.minutes))}`}</span></span></label>`).join('')}
     <div class="row" style="margin-top:10px"><label style="font-size:14px">${t('role')} <select id="import-role">${template.roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></label></div>
     <div class="row" style="margin-top:10px"><button class="primary" id="import-add"></button><button id="import-no">${t('cancel')}</button></div>`;
   const count = () => { $('import-add').textContent = t('importAdd')(importList.filter((x) => x.keep).length); };
@@ -780,6 +832,10 @@ async function addImported() {
   let next = template;
   const addOne = (name, args) => { const r = runWeekTool(next, name, args, day); if (r.ok) next = r.template; };
   for (const x of importList.filter((i) => i.keep)) {
+    if (x.kind === 'weekly') {
+      addOne('add_event', { title: x.title, start: x.start, minutes: toMin(x.end) - toMin(x.start), days: x.days });
+      continue;
+    }
     if (x.kind === 'event') {
       if (x.date > state.date) addOne('add_event', { title: x.title, start: x.start, minutes: toMin(x.end) - toMin(x.start), date: x.date });
       continue;

@@ -72,10 +72,10 @@
       </div>
       <p class="hint" data-t="changedHint"></p>
       <p class="hint" id="private-hint" data-t="privateHint" hidden></p>
-      <div id="status" class="hint"></div>
+      <div id="status" class="hint" role="status" aria-live="polite"></div>
       <ol class="steps" id="live-steps"></ol>
       <div id="thread"></div>
-      <div id="answer"></div>
+      <div id="answer" aria-live="polite"></div>
     </section>
 
     <details class="card">
@@ -137,7 +137,7 @@
           <button class="primary" id="import-open" data-t="importBtn"></button>
           <button id="import-sample" data-t="importSample"></button>
         </div>
-        <input type="file" id="doc-file" accept="application/pdf,image/*" hidden>
+        <input type="file" id="doc-file" accept="application/pdf,image/*,.ics,text/calendar" hidden>
         <div class="hint" id="import-status"></div>
       </section>
       <section class="card" id="import-card" hidden></section>

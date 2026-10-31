@@ -230,6 +230,20 @@ await check('typing your own words asks for consent once, in the app', async () 
   await p.context().close();
 });
 
+await check('a calendar file is read on the device, with nothing sent', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  await p.click('[data-tab=goals]');
+  p.apiCalls.length = 0;
+  await p.setInputFiles('#doc-file', { name: 'cal.ics', mimeType: 'text/calendar', buffer: Buffer.from('BEGIN:VEVENT\r\nSUMMARY:Lab\r\nDTSTART:20261110T090000\r\nDTEND:20261110T110000\r\nEND:VEVENT\r\n') });
+  await p.waitForSelector('#import-add');
+  assert.deepEqual(p.apiCalls, []);
+  await p.click('#import-add');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-template')).fixed.some((f) => f.title === 'Lab'));
+  await p.context().close();
+});
+
 if (AI) {
   await check('AI: a sample syllabus becomes a list to approve, then real deadlines', async () => {
     const p = await open();
@@ -246,6 +260,18 @@ if (AI) {
     await p.waitForFunction((n) => JSON.parse(localStorage.getItem('meso-template')).tasks.length > n, before);
     assert.deepEqual(p.errors, []);
     await p.context().close();
+  });
+
+  await check('AI: saying which option you want applies it, in English and Vietnamese', async () => {
+    for (const [lang, words] of [['en', 'option 2'], ['vi', 'chọn cách 2']]) {
+      const p = await open({ seed: { 'meso-consent': '2026-11-01', 'meso-lang': lang, 'meso-intro': 'x' } });
+      await p.click('#try');
+      await p.waitForSelector('[data-opt="1"]', { timeout: 40000 });
+      await p.fill('#say', words);
+      await p.click('#send');
+      await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-state')).queue.some((q) => q.status === 'cut'), null, { timeout: 30000 });
+      await p.context().close();
+    }
   });
 
   await check('AI: set up a week from a description, with goals', async () => {
