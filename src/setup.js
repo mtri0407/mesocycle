@@ -140,7 +140,7 @@ export function buildDay(template, { date, weekday, now }) {
     week: Object.fromEntries(template.roles.map((r) => [r.id, {
       done: template.done?.[r.id] || 0, futureBudget: 0, laterMin: Math.round((r.floorMin * daysLeft) / 7),
     }])),
-    fixed: template.fixed.filter((f) => f.days.includes(weekday)).map((f) => ({ id: f.id, title: f.title, start: toMin(f.start), end: toMin(f.end) })),
+    fixed: template.fixed.filter((f) => (f.on && date ? f.on === date : f.days.includes(weekday))).map((f) => ({ id: f.id, title: f.title, start: toMin(f.start), end: toMin(f.end) })),
     queue: [],
     deadlines: [],
     actuals: template.actuals || [],
@@ -192,7 +192,11 @@ export function rebaseDay(template, state, { weekday }) {
     queue.push({ ...q, title: t.title, roleId: t.roleId, rank: t.rank, base: t.minutes, minutes: changed ? t.minutes : q.minutes });
   }
   const next = { ...fresh, fixed: [...fresh.fixed, ...state.fixed.filter(isAgentFixed)], queue, actuals: state.actuals || [] };
-  return fill(next, openTasks(template).filter((t) => !queue.some((q) => q.id === t.id)));
+  const fresher = openTasks(template).filter((t) => !queue.some((q) => q.id === t.id));
+  // Work due today joins even if the day is full, so the user is asked what
+  // gives way instead of the deadline slipping quietly.
+  next.queue = [...queue, ...fresher.filter((t) => t.deadline && t.deadline <= state.date).map(toItem)];
+  return fill(next, fresher.filter((t) => !next.queue.some((q) => q.id === t.id)));
 }
 
 // Monday of the week a date is in. Weeks run Monday to Sunday.
@@ -244,6 +248,7 @@ export function closeWeek(t, nextWeekStart) {
   return {
     ...t,
     tasks,
+    fixed: t.fixed.filter((f) => !f.on || f.on >= nextWeekStart),
     history: [...(t.history || []), weekReview(t)].slice(-12),
     done: {},
     weekStart: nextWeekStart,

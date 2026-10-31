@@ -11,6 +11,8 @@ import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, CHECKIN
 import { replan, toHHMM } from './planner.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
 import { voiceProxy } from './voice.js';
+import { sampleWeek } from './sample.js';
+import { saveReminders, deleteReminders, sendDue } from './push.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -41,6 +43,9 @@ async function aiGuard(request, env) {
 }
 
 export default {
+  // Every 5 minutes: wake the browsers that have a block starting now.
+  scheduled(event, env, ctx) { ctx.waitUntil(sendDue(env, Date.now())); },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
@@ -53,7 +58,7 @@ export default {
       if (url.pathname === '/api/voice') {
         if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'WebSocket only' }, 426);
         const blocked = await aiGuard(request, env);
-        return blocked || await voiceProxy(env);
+        return blocked || await voiceProxy(env, url.searchParams.get('call') === '1');
       }
 
       // Voice check-in: the browser sends a WAV clip, we return the text.
@@ -108,7 +113,11 @@ export default {
           modelMs += out.ms;
           return out;
         };
-        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null };
+        // Only short plain turns are kept as memory of the conversation.
+        const history = (Array.isArray(body.history) ? body.history : []).slice(-8)
+          .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string')
+          .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
+        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call };
         if (!body.stream) {
           const out = await runAgent(args);
           return json({ ok: true, ...out, modelMs, view: view(out.state) });
@@ -192,6 +201,20 @@ export default {
         return json({ ok: false, error: 'Could not build a valid week, try describing it again.', steps, modelMs }, 422);
       }
 
+      // A made-up week for new visitors, clearly labelled in the app.
+      if (url.pathname === '/api/sample' && body) {
+        const template = sampleWeek(body);
+        const state = buildDay(template, { date: body.date, weekday: body.weekday, now: 9 * 60 });
+        return json({ ok: true, template, state, view: view(state) });
+      }
+
+      // Reminders: a push address and today's times, never task names.
+      if (url.pathname === '/api/reminders' && body) {
+        if (body.off) await deleteReminders(env, String(body.endpoint));
+        else await saveReminders(env, { endpoint: String(body.endpoint), times: body.times });
+        return json({ ok: true });
+      }
+
       // Today's plan from a saved weekly template (a new day, or after edits).
       if (url.pathname === '/api/day' && body) {
         const out = rollover(body.template, body.state || null, { date: body.date, weekday: body.weekday, now: body.now });
@@ -230,7 +253,7 @@ export default {
 
       // Accounts: Google sign-in, then one saved plan per person.
       if (url.pathname === '/api/config') {
-        return json({ ok: true, googleClientId: env.GOOGLE_CLIENT_ID || null });
+        return json({ ok: true, googleClientId: env.GOOGLE_CLIENT_ID || null, vapidPublic: env.VAPID_JWK ? env.VAPID_PUBLIC : null });
       }
       if (url.pathname === '/api/login' && body) {
         if (!env.GOOGLE_CLIENT_ID) return json({ ok: false, error: 'Sign-in is not set up yet' }, 503);

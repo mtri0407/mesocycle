@@ -5,6 +5,11 @@ compatibility_date = "2026-10-01"
 # Public by design: Google shows this id to every browser.
 [vars]
 GOOGLE_CLIENT_ID = "1075267755415-ocr5864jp2bmkmfjojlbtl3im52dqqam.apps.googleusercontent.com"
+VAPID_PUBLIC = "BF4soh814486-QrhzneCwnNU5e_PU4kDtnCPinuHdjfHBxoT1kmvi0m_usbwdKhdGbUWZJRBv6yqtpVmxt3NzNA"
+
+# Sends reminders (src/push.js)
+[triggers]
+crons = ["*/5 * * * *"]
 
 # The web app (HTML/CSS/JS) is served from public/
 [assets]

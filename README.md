@@ -24,6 +24,9 @@ I built a planner with an automatic "reschedule" button before this hackathon, a
 8. **Edit anything directly.** Roles, fixed events, tasks, goals, wake and sleep. Editing mid-day keeps finished work, debt and what the agent added.
 9. **Start the day with a check-in.** The first open of each day gets a short read-only summary from Muse Spark: what comes first, what matters most, and one question.
 10. **Talk, and watch the words appear.** Speech streams live through the Worker to Muse Voice Transcribe. If the live connection fails, the recording is transcribed the old way, so nothing you said is lost.
+11. **Call the agent.** Hands-free: Muse Voice Transcribe hears when you finish a sentence, the agent acts through the same checked tools, and your device reads the answer aloud. It can add work with a deadline, one-time or weekly events and goals, remembers the conversation, and takes "option 2" as your answer to a proposal.
+12. **See a sample week.** A made-up week with goals, history and a trend chart, so you can see everything in seconds.
+13. **Get reminders.** Optional push notifications at the start of each block, even with the app closed. Push messages carry no task names.
 
 Or press **Try the demo** to replay the author's real broken Friday before midterms.
 
@@ -59,7 +62,7 @@ Google Calendar stores the events you put in it; re-planning a broken day is lef
                                          └──── rejection + reason ───────┘ and every rule
 ```
 
-The model never edits the plan. It calls six tools (`get_state`, `add_fixed`, `add_item`, `update_item`, `reorder`, `propose`). Every call is validated in code. If the model proposes something that breaks a rule (a cut that still doesn't fit, an alternative that pushes "Family & friends" under its floor), the tool rejects it with the reason, and the model reads the reason and corrects itself. The "Agent steps" panel in the app shows these ✗ and ✓ steps.
+The model never edits the plan. It calls checked tools: six for today (`get_state`, `add_fixed`, `add_item`, `update_item`, `reorder`, `propose`) and, on a real week, `add_task`, `add_event`, `add_goal` and `accept_proposal`. They can add work but never remove it, and none of them can touch sleep or a floor. Every call is validated in code. If the model proposes something that breaks a rule (a cut that still doesn't fit, an alternative that pushes "Family & friends" under its floor), the tool rejects it with the reason, and the model reads the reason and corrects itself. The "Agent steps" panel in the app shows these ✗ and ✓ steps.
 
 ## Use of Meta AI
 

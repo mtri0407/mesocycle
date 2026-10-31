@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, validateNext, adoptNext, checkTemplate } from '../src/setup.js';
 import { replan } from '../src/planner.js';
+import { runWeekTool } from '../src/week-tools.js';
+import { runAgent } from '../src/agent.js';
+import { sampleWeek } from '../src/sample.js';
 import { checkPlan } from '../src/invariants.js';
 
 const week = (over = {}) => ({
@@ -184,3 +187,85 @@ test('the check-in sees plan names and pace, nothing else', () => {
   assert.equal(brief.goals[0].behind, true);
   assert.ok(!JSON.stringify(brief).includes('a@b.c'));
 });
+
+const add = (t, name, a) => runWeekTool(t, name, a, { today: '2026-11-03' });
+
+test('the agent can add work with a deadline, and it is planned first', () => {
+  const r = add(tpl(), 'add_task', { title: 'Report', role: 'r1', minutes: 120, rank: '1', deadline: '2026-11-05' });
+  assert.equal(r.ok, true);
+  const day = buildDay(r.template, { date: '2026-11-03', weekday: 2, now: 11 * 60 });
+  assert.equal(day.queue[0].title, 'Report');
+});
+
+test('week tools refuse bad input with a reason', () => {
+  assert.match(add(tpl(), 'add_task', { title: 'x', role: 'r9', minutes: 60, rank: '1' }).error, /Unknown role/);
+  assert.match(add(tpl(), 'add_task', { title: 'x', role: 'r1', minutes: 60, rank: '1', deadline: '2026-11-01' }).error, /today/);
+  assert.match(add(tpl(), 'add_event', { title: 'x', start: '09:00', minutes: 60 }).error, /either date/);
+  assert.match(add(tpl(), 'add_event', { title: 'x', start: '09:00', minutes: 60, date: '2026-11-03' }).error, /add_fixed/);
+});
+
+test('a one-time event lands on its date only, and leaves with its week', () => {
+  const { template } = add(tpl(), 'add_event', { title: 'Dentist', start: '09:00', minutes: 60, date: '2026-11-05' });
+  const on = (date, weekday) => buildDay(template, { date, weekday, now: 7 * 60 }).fixed.map((f) => f.title);
+  assert.ok(on('2026-11-05', 4).includes('Dentist'));
+  assert.ok(!on('2026-11-12', 4).includes('Dentist'));
+  const next = rollover(template, null, { date: '2026-11-09', weekday: 1, now: 7 * 60 });
+  assert.ok(!next.template.fixed.some((f) => f.title === 'Dentist'));
+});
+
+test('a repeating event comes back every week', () => {
+  const { template } = add(tpl(), 'add_event', { title: 'Club', start: '18:00', minutes: 60, days: [4] });
+  assert.ok(buildDay(template, { date: '2026-11-12', weekday: 4, now: 7 * 60 }).fixed.some((f) => f.title === 'Club'));
+});
+
+const script = (...calls) => { let i = 0; return async () => { const c = calls[i++]; return c ? { text: '', toolCalls: [c], message: {} } : { text: 'ok', toolCalls: [], message: {} }; }; };
+
+test('the agent adds to the week and today follows, on a real week only', async () => {
+  const t = tpl();
+  const state = day3(t);
+  const call = { id: '1', name: 'add_task', args: { title: 'Report', role: 'r1', minutes: 60, rank: '1', deadline: '2026-11-03' } };
+  const out = await runAgent({ state, userText: 'x', chatFn: script(call), template: t, weekday: 2 });
+  assert.ok(out.template.tasks.some((x) => x.title === 'Report'));
+  assert.ok(out.state.queue.some((q) => q.title === 'Report'));
+  const demo = await runAgent({ state, userText: 'x', chatFn: script(call) });
+  assert.equal(demo.template, undefined);
+  assert.equal(demo.trace[0].ok, false);
+});
+
+test('a spoken choice applies the pending proposal; a wrong option changes nothing', async () => {
+  const t = tpl();
+  const state = day3(t);
+  const id = state.queue[0].id;
+  const pending = { options: [[id]] };
+  const ok = await runAgent({ state, userText: 'option 1', chatFn: script({ id: '1', name: 'accept_proposal', args: { option: 1 } }), pending });
+  assert.equal(ok.state.queue.find((q) => q.id === id).status, 'cut');
+  const bad = await runAgent({ state, userText: 'option 2', chatFn: script({ id: '1', name: 'accept_proposal', args: { option: 2 } }), pending });
+  assert.equal(bad.trace[0].ok, false);
+  assert.equal(bad.state.queue.find((q) => q.id === id).status, 'todo');
+});
+
+test('work due today joins a full day, so the user is asked instead of it slipping', () => {
+  const t = tpl();
+  const day = day3(t);
+  const { template } = add(t, 'add_task', { title: 'Due now', role: 'r1', minutes: 120, rank: '1', deadline: '2026-11-03' });
+  const out = rebaseDay(template, { ...day, now: 18 * 60 }, { weekday: 2 });
+  assert.ok(out.queue.some((q) => q.title === 'Due now'));
+  assert.deepEqual(checkPlan(out, replan(out)), []);
+});
+
+for (const lang of ['en', 'vi']) {
+  test(`the sample week is valid and keeps every promise (${lang})`, () => {
+    for (let weekday = 0; weekday < 7; weekday++) {
+      const date = `2026-11-${String(8 + weekday).padStart(2, '0')}`;
+      const real = (new Date(`${date}T00:00:00Z`)).getUTCDay();
+      const t = sampleWeek({ date, weekday: real, lang });
+      assert.deepEqual(checkTemplate(t), []);
+      const day = buildDay(t, { date, weekday: real, now: 9 * 60 });
+      assert.deepEqual(checkPlan(day, replan(day)), []);
+      assert.equal(t.sample, true);
+      assert.ok(t.history.length >= 2);
+    }
+    const friday = sampleWeek({ date: '2026-11-13', weekday: 5, lang });
+    assert.ok(goalPace(friday, { weekday: 5, date: '2026-11-13' }).some((g) => g.behind));
+  });
+}

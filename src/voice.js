@@ -2,13 +2,15 @@
 // this Worker over a WebSocket and the Worker talks to Muse Voice Transcribe.
 // The Worker only passes audio up and transcripts down; nothing is stored.
 const MAX_SESSION_MS = 120_000;
+const MAX_CALL_MS = 600_000;
 const MAX_FRAME_BYTES = 64_000;
 
-export const handshake = (key) => ({
+export const handshake = (key, call = false) => ({
   authorization: { accessToken: `Bearer ${key}` },
   audioEncoding: 'PCM_24KHZ',
   model: 'muse-voice-transcribe-1.0',
-  mode: 'PUSH_TO_TALK',
+  mode: call ? 'ENDPOINTING' : 'PUSH_TO_TALK', // a call needs the model to hear when a turn ends
+  languageBias: ['Vietnamese', 'English'],
 });
 
 // The only frame without a type is the handshake reply. Everything else that
@@ -18,11 +20,13 @@ export function readUpstream(text) {
   try { m = JSON.parse(text); } catch { return { kind: 'ignore' }; }
   if (!m.type) return { kind: 'ready' };
   if (m.type === 'transcript') return { kind: 'send', msg: { type: 'transcript', text: String(m.transcript || ''), final: !!m.final } };
+  // In a call, speechComplete is the signal that a whole turn was heard.
+  if (m.type === 'speechComplete') return { kind: 'send', msg: { type: 'turn', text: String(m.transcript || '') } };
   if (m.type === 'error') return { kind: 'send', msg: { type: 'error' } };
   return { kind: 'ignore' };
 }
 
-export async function voiceProxy(env) {
+export async function voiceProxy(env, call = false) {
   if (!env.MODEL_API_KEY) throw new Error('Missing MODEL_API_KEY for voice transcription.');
   const res = await fetch('https://api.meta.ai/v1/asr/realtime', { headers: { Upgrade: 'websocket' } });
   const meta = res.webSocket;
@@ -39,7 +43,7 @@ export async function voiceProxy(env) {
     try { server.close(1000, 'done'); } catch { /* already closed */ }
     try { meta.close(1000, 'done'); } catch { /* already closed */ }
   };
-  const timer = setTimeout(closeAll, MAX_SESSION_MS);
+  const timer = setTimeout(closeAll, call ? MAX_CALL_MS : MAX_SESSION_MS);
 
   // Workers hand binary frames over as Blobs. Reading one takes a moment, so
   // frames go through a chain to reach Meta in the order they were spoken.
@@ -67,6 +71,6 @@ export async function voiceProxy(env) {
   meta.addEventListener('close', closeAll);
   meta.addEventListener('error', closeAll);
 
-  meta.send(JSON.stringify(handshake(env.MODEL_API_KEY)));
+  meta.send(JSON.stringify(handshake(env.MODEL_API_KEY, call)));
   return new Response(null, { status: 101, webSocket: client });
 }

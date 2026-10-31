@@ -1,6 +1,9 @@
 // The agent loop: the model reads the state and proposes through tools,
 // tools.js checks every call. The model never touches the state directly.
 import { TOOLS, runTool } from './tools.js';
+import { WEEK_TOOLS, WEEK_TOOL_NAMES, ACCEPT_TOOL, runWeekTool } from './week-tools.js';
+import { rebaseDay } from './setup.js';
+import { applyEvent } from './planner.js';
 
 export const SYSTEM_PROMPT = `You are Mesocycle, a planning agent. You protect the user's deadlines and
 life floors, not the clock. Only fixed events (classes, exams, meetings,
@@ -17,6 +20,12 @@ How you work:
 - Missed work becomes debt; never push it into a specific future slot.
 - A photo (timetable, syllabus, to-do list): add only what happens TODAY.
   Classes and meetings with a time are add_fixed; tasks are add_item.
+- add_item is for today only. If those tools are offered: work for
+  another day or with a deadline is add_task; a set time on another day,
+  or something that repeats every week, is add_event; a new long-term
+  goal is add_goal. Work out dates from today's date.
+- If a pending proposal comes with the message and the user clearly picks
+  an option, call accept_proposal. Never choose for them.
 - When the plan has cutOptions, propose with them: option 1 as cut_ids,
   option 2 (if any) as alternative_cut_ids. They are already checked;
   do not invent your own cut list.
@@ -40,12 +49,15 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // can use a scripted fake model and never spend credits.
 // image: optional data URL (a timetable, a syllabus, a to-do list photo).
 // onStep(step) is called after every tool call so the UI can show progress live.
-export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {} }) {
+// template and pending are only there for a real week: template unlocks the
+// tools that reach past today, pending is a proposal waiting for an answer.
+export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false }) {
   // Sending the plan up front saves one model round trip (a get_state call).
   const plan = runTool(state, 'get_state', {}).result;
+  const title = (id) => state.queue.find((i) => i.id === id)?.title || id;
   const content = `${userText}
 
-Current plan:
+${state.date ? `Today is ${state.date} (weekday ${weekday}, 0=Sunday).\n` : ''}${call ? 'This is a voice call: your reply is read aloud, so no lists, at most 2 short sentences.\n' : ''}${pending ? `Pending proposal: ${pending.options.map((ids, i) => `option ${i + 1} moves to debt: ${ids.map(title).join(', ')}`).join('; ')}.\n` : ''}Current plan:
 ${JSON.stringify(plan)}`;
   const user = image
     ? { role: 'user', content: [{ type: 'text', text: content }, { type: 'image_url', image_url: { url: image } }] }
@@ -54,14 +66,29 @@ ${JSON.stringify(plan)}`;
   const trace = [];
   let proposal = null;
   let rejections = 0;
+  const tools = [...TOOLS, ...(template ? WEEK_TOOLS : []), ...(pending ? [ACCEPT_TOOL] : [])];
+  let changedWeek = false;
+  const finish = (out) => (changedWeek ? { ...out, template } : out);
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const out = await chatFn(messages, TOOLS);
-    if (!out.toolCalls.length) return { reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace };
+    const out = await chatFn(messages, tools);
+    if (!out.toolCalls.length) return finish({ reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace });
 
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
     for (const call of out.toolCalls) {
-      const res = runTool(state, call.name, call.args);
+      let res;
+      if (template && WEEK_TOOL_NAMES.has(call.name)) {
+        res = { ...runWeekTool(template, call.name, call.args, { today: state.date }), state };
+        if (res.ok) {
+          template = res.template;
+          changedWeek = true;
+          state = rebaseDay(template, state, { weekday });
+          res = { ...res, state, result: runTool(state, 'get_state', {}).result };
+        }
+      } else if (pending && call.name === 'accept_proposal') {
+        const ids = pending.options[(call.args?.option ?? 0) - 1];
+        res = ids ? runTool(applyEvent(state, { type: 'cut', ids }), 'get_state', {}) : { ok: false, error: 'option must be 1 or 2.', state };
+      } else res = runTool(state, call.name, call.args);
       const step = { tool: call.name, args: call.args ?? call.rawArgs, ok: res.ok, error: res.error };
       trace.push(step);
       onStep(step);
@@ -78,8 +105,8 @@ ${JSON.stringify(plan)}`;
       });
     }
     if (rejections >= MAX_REJECTIONS) {
-      return { reply: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', state, proposal, trace, stopped: 'rejections' };
+      return finish({ reply: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', state, proposal, trace, stopped: 'rejections' });
     }
   }
-  return { reply: 'That took too many steps. Here is the plan as it stands.', state, proposal, trace, stopped: 'steps' };
+  return finish({ reply: 'That took too many steps. Here is the plan as it stands.', state, proposal, trace, stopped: 'steps' });
 }

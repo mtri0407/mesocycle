@@ -72,11 +72,11 @@
     @media (prefers-reduced-motion: reduce) { .tl .blk, .tl .nowline { transition: none; } }
     input[type=time], select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
     :root {
-      --r0: #2457d6; --r1: #0f8a6a; --r2: #c2410c; --r3: #8b3fd1; --r4: #c0266d; --r5: #8a6d00; --r6: #0e7490; --r7: #4b5563;
+      --r0: #2457d6; --r1: #0f8a6a; --r2: #c2410c; --r3: #8b3fd1; --r4: #c0266d; --r5: #8a6d00; --r6: #0b7cae; --r7: #77791a;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
-        --r0: #7ea3ff; --r1: #4cc9a6; --r2: #fb923c; --r3: #c49bff; --r4: #f472b6; --r5: #e0c050; --r6: #4fc3dc; --r7: #aab3c0;
+        --r0: #5f87ee; --r1: #25a886; --r2: #d96f1c; --r3: #9670ea; --r4: #e05289; --r5: #ad8f22; --r6: #2299cf; --r7: #8a9629;
       }
     }
     body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; font-feature-settings: 'cv11', 'ss03'; -webkit-font-smoothing: antialiased; }
@@ -131,6 +131,18 @@
     .consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin-top: 8px; }
     .consent[hidden] { display: none; }
     .consent input { margin-top: 3px; flex: none; }
+    #call-box { position: fixed; z-index: 7; left: 12px; right: 12px; bottom: calc(72px + env(safe-area-inset-bottom)); max-width: 616px; margin: 0 auto; max-height: 45vh; overflow-y: auto; box-shadow: 0 8px 28px rgba(0, 0, 0, .22); border: 2px solid var(--accent); }
+    #call-box[hidden] { display: none; }
+    #call-phase { font-size: 15px; }
+    #call-live:empty, #call-note:empty, #call-reply:empty { display: none; }
+    @media (min-width: 760px) { #call-box { bottom: 16px; } }
+    .trend { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-top: 8px; }
+    .trend .name { font-size: 14px; display: flex; align-items: center; }
+    .trend .val { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .tbars { position: relative; height: 56px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--line); margin-top: 6px; }
+    .tb { flex: 1; max-width: 22px; min-height: 2px; background: var(--rc); border-radius: 4px 4px 0 0; }
+    .tb.cur { opacity: .5; }
+    .tgt { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); }
     .invite { text-align: center; padding: 28px 16px; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
@@ -151,6 +163,7 @@
   </header>
   <main>
     <div id="p-today">
+    <section class="card caption" id="sample-bar" hidden style="margin:0 0 14px"></section>
     <section class="card caption" id="week-banner" hidden style="margin:0 0 14px"></section>
     <section class="card intro" id="intro"></section>
     <section class="card" id="setup" hidden>
@@ -180,6 +193,7 @@
       <textarea id="say"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" id="send" data-t="replan"></button>
+        <button id="call" data-t="callBtn"></button>
         <button id="mic"></button>
         <button id="photo" data-t="photo"></button>
         <input type="file" id="photo-file" accept="image/*" hidden>
@@ -207,6 +221,8 @@
     <div class="row" id="real-row" hidden style="margin-bottom:14px">
       <button class="small" id="rebuild" data-t="rebuild"></button>
       <button class="small" id="to-demo" data-t="toDemo"></button>
+      <button class="small" id="remind" hidden></button>
+      <span class="hint" id="remind-status" style="margin:0"></span>
     </div>
 
     <details class="card" id="demo-box">
@@ -229,6 +245,7 @@
 
     <div id="p-week" hidden>
       <section class="card" id="review-card" hidden></section>
+      <section class="card" id="trend-card" hidden></section>
       <section class="card"><div id="week-card"></div><div id="week-forecast"></div></section>
       <section class="card" id="week-invite" hidden></section>
       <div id="edit-week" hidden>
@@ -247,6 +264,16 @@
     </div>
 
     <p class="hint" style="text-align:center"><a href="/privacy" data-t="privacyLink" style="color:var(--accent)"></a></p>
+
+    <section class="card" id="call-box" hidden aria-live="polite">
+      <div class="row" style="justify-content:space-between">
+        <b id="call-phase"></b>
+        <button id="call-end" data-t="callEnd"></button>
+      </div>
+      <p class="hint" id="call-live"></p>
+      <p id="call-reply" style="margin:6px 0 0"></p>
+      <p class="hint" id="call-note"></p>
+    </section>
 
     <section class="card" id="edit-bar" hidden>
       <div class="row">
@@ -293,12 +320,17 @@
         send: 'Send', thanks: 'Thank you!',
         demoControls: 'Demo controls', clock: 'Clock', reset: 'Reset demo day',
         clockHint: 'The demo clock replaces real time so you can jump to any moment of the day.',
-        tool: { get_state: 'read the plan', add_fixed: 'add a fixed event', update_item: 'update an item', add_item: 'add work', reorder: 'reorder the queue', propose: 'propose a cut' },
+        tool: { get_state: 'read the plan', add_fixed: 'add a fixed event', update_item: 'update an item', add_item: 'add work', reorder: 'reorder the queue', propose: 'propose a cut', add_task: 'add work', add_event: 'add to the calendar', add_goal: 'add a goal', accept_proposal: 'apply your choice' },
         demoText: "I slept through the afternoon, and there's a class meeting at 7pm for an hour",
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, consentText: 'I am 18 or older and agree to the', consentLink: 'privacy policy', consentTail: ', including sending what I type, say or photograph to AI providers.', consentNeed: 'Please tick the box first.',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, callBtn: '📞 Call AI', callEnd: 'End call', call_listening: 'Listening...', call_thinking: 'Working on it...', call_speaking: 'Talking...',
+        callHello: 'I am listening. What changed?', noVoice: 'This device has no voice for this language, so the answer is shown as text.', optionN: (n) => `Option ${n}`,
+        sampleBtn: '👀 See a sample week', sampleBar: 'This is a made-up sample week. Press things, nothing is saved.', sampleExit: 'Exit sample',
+        trendTitle: 'Week by week', trendHint: 'Bars are real hours. The dashed line is the target. The lighter bar is this week so far.', debtLine: (list) => `Debt at the end of each week: ${list}`, weekOf: (d, h) => `Week of ${d}: ${h}h`,
+        remindOn: '🔔 Turn on reminders', remindOff: '🔕 Turn off reminders', remindDenied: 'Notifications are blocked for this site in your browser settings.', remindSet: 'Reminders are on for today\'s blocks.',
+        consentText: 'I am 18 or older and agree to the', consentLink: 'privacy policy', consentTail: ', including sending what I type, say or photograph to AI providers.', consentNeed: 'Please tick the box first.',
         checkinTitle: 'This morning', checkinOk: 'Sounds good', checkinChange: 'Something changed', signedOut: 'Sign in with Google to keep your week on any device.', signedIn: (n) => `Signed in as ${n}. Your plan is saved.`, logout: 'Sign out', saving: 'Saving...', authOff: 'Sign-in is not set up yet; your plan is saved in this browser. AI requests go to the providers in the privacy policy.', privacyLink: 'Privacy', deleteData: 'Delete my data', deleteAsk: 'Delete your saved plan from the server and this browser? This cannot be undone.', errRate: 'Too many requests. Wait a minute and try again.', errCap: 'The demo reached its daily AI limit. Please try again tomorrow.', errNet: 'Could not reach Mesocycle. Check your connection and try again.', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], rest: 'Rest of the week (forecast)', restHint: 'Where today\'s debt (in orange) would land. Only a preview: every morning the real day is planned again.', leftOver: 'Still open after Sunday', moreN: 'more',
         weekTab: 'Week', goalsTab: 'Goals', role: 'Role', planned: 'Planned', actual: 'Actual',
         reviewTitle: 'Week review', reviewBtn: 'Review this week', reviewLast: 'Last week', keepWeek: 'Keep the same week',
@@ -355,12 +387,17 @@
         send: 'Gửi', thanks: 'Cảm ơn bạn!',
         demoControls: 'Điều khiển demo', clock: 'Đồng hồ', reset: 'Làm lại ngày demo',
         clockHint: 'Đồng hồ demo thay cho giờ thật để bạn nhảy tới bất kỳ lúc nào trong ngày.',
-        tool: { get_state: 'đọc kế hoạch', add_fixed: 'thêm lịch cố định', update_item: 'cập nhật việc', add_item: 'thêm việc', reorder: 'sắp lại thứ tự', propose: 'đề xuất cắt' },
+        tool: { get_state: 'đọc kế hoạch', add_fixed: 'thêm lịch cố định', update_item: 'cập nhật việc', add_item: 'thêm việc', reorder: 'sắp lại thứ tự', propose: 'đề xuất cắt', add_task: 'thêm việc', add_event: 'thêm vào lịch', add_goal: 'thêm mục tiêu', accept_proposal: 'áp dụng lựa chọn của bạn' },
         demoText: 'Chiều nay tôi ngủ quên, 7 giờ tối có họp ban cán sự 1 tiếng',
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, consentText: 'Tôi đủ 18 tuổi và đồng ý với', consentLink: 'chính sách quyền riêng tư', consentTail: ', gồm việc gửi nội dung tôi gõ, nói hoặc chụp tới nhà cung cấp AI.', consentNeed: 'Vui lòng tích vào ô xác nhận trước.',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, callBtn: '📞 Gọi AI', callEnd: 'Kết thúc', call_listening: 'Đang nghe...', call_thinking: 'Đang xử lý...', call_speaking: 'Đang nói...',
+        callHello: 'Mình nghe đây. Có gì thay đổi không?', noVoice: 'Thiết bị này chưa có giọng đọc cho ngôn ngữ này, câu trả lời hiện bằng chữ.', optionN: (n) => `Cách ${n}`,
+        sampleBtn: '👀 Xem tuần mẫu', sampleBar: 'Đây là tuần mẫu dựng sẵn. Cứ bấm thử, không có gì được lưu.', sampleExit: 'Thoát tuần mẫu',
+        trendTitle: 'Theo từng tuần', trendHint: 'Cột là số giờ thật. Vạch đứt là mục tiêu giờ. Cột nhạt là tuần này tới nay.', debtLine: (list) => `Nợ cuối mỗi tuần: ${list}`, weekOf: (d, h) => `Tuần ${d}: ${h} giờ`,
+        remindOn: '🔔 Bật nhắc việc', remindOff: '🔕 Tắt nhắc việc', remindDenied: 'Thông báo đang bị chặn cho trang này trong cài đặt trình duyệt.', remindSet: 'Đã bật nhắc cho các việc hôm nay.',
+        consentText: 'Tôi đủ 18 tuổi và đồng ý với', consentLink: 'chính sách quyền riêng tư', consentTail: ', gồm việc gửi nội dung tôi gõ, nói hoặc chụp tới nhà cung cấp AI.', consentNeed: 'Vui lòng tích vào ô xác nhận trước.',
         checkinTitle: 'Sáng nay', checkinOk: 'Ổn rồi', checkinChange: 'Có thay đổi', signedOut: 'Đăng nhập Google để giữ tuần của bạn trên mọi thiết bị.', signedIn: (n) => `Đã đăng nhập: ${n}. Kế hoạch được lưu tự động.`, logout: 'Đăng xuất', saving: 'Đang lưu...', authOff: 'Chưa bật đăng nhập; kế hoạch được lưu trên trình duyệt này. Yêu cầu AI được gửi tới các nhà cung cấp nêu trong chính sách quyền riêng tư.', privacyLink: 'Quyền riêng tư', deleteData: 'Xoá dữ liệu của tôi', deleteAsk: 'Xoá kế hoạch đã lưu trên máy chủ và trình duyệt này? Không thể hoàn tác.', errRate: 'Bạn gửi hơi nhanh. Chờ một phút rồi thử lại nhé.', errCap: 'Bản demo đã dùng hết lượt AI hôm nay. Mai bạn thử lại nhé.', errNet: 'Không kết nối được Mesocycle. Kiểm tra mạng rồi thử lại.', days: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'], rest: 'Phần còn lại của tuần (dự kiến)', restHint: 'Nợ hôm nay (màu cam) sẽ rơi vào đâu. Chỉ là dự kiến: mỗi sáng ngày thật được xếp lại.', leftOver: 'Còn tồn sau Chủ nhật', moreN: 'nữa',
         weekTab: 'Tuần', goalsTab: 'Mục tiêu', role: 'Vai trò', planned: 'Kế hoạch', actual: 'Thực tế',
         reviewTitle: 'Tổng kết tuần', reviewBtn: 'Tổng kết tuần này', reviewLast: 'Tuần trước', keepWeek: 'Giữ nguyên tuần cũ',
@@ -405,7 +442,7 @@
     stats = stats || { replans: 0, approvals: 0, doneMin: 0, debtRepaidMin: 0, days: [] };
     const saveStats = () => store.set('meso-stats', JSON.stringify(stats));
     function count(kind, minutes = 0) {
-      if (mode !== 'real') return;
+      if (mode !== 'real' || template?.sample) return;
       const d = today().date;
       if (!stats.days.includes(d)) stats.days.push(d);
       if (kind === 'replan') stats.replans++;
@@ -436,7 +473,7 @@
       $('gsi').hidden = !!account || !googleClientId || !consented();
     }
     function scheduleSave() {
-      if (!sid || mode !== 'real') return;
+      if (!sid || mode !== 'real' || template?.sample) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ mode, template, state, stats: typeof stats !== 'undefined' ? stats : null }) })
@@ -462,7 +499,7 @@
       } catch (e) { $('account-text').textContent = e.message; }
     }
     async function initAccount() {
-      try { googleClientId = (await api('/api/config')).googleClientId; } catch {}
+      try { const c = await api('/api/config'); googleClientId = c.googleClientId; vapidPublic = c.vapidPublic; } catch {}
       if (sid) {
         const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
         if (r && r.ok) { account = r.user; useCloud(r.data); } else signOutLocal();
@@ -496,16 +533,17 @@
       $('setup-photo-chip').textContent = t('photoAdded');
       $('mic').textContent = recorder && micTarget === 'say' ? t('stop') : t('speak');
       renderIntro();
-      if (view) render();
+      if (view) { render(); renderExtras(); }
     }
 
     function renderIntro() {
       // The intro explains the demo, so it stays out of the way once the week is yours.
       $('intro').hidden = mode === 'real' || store.get('meso-intro') === 'hidden';
       if ($('intro').hidden) return;
-      $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="setup-open">${t('setupBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
+      $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
       $('try').onclick = tryDemo;
       $('setup-open').onclick = openSetup;
+      $('sample-open').onclick = loadSample;
       $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
     }
 
@@ -526,6 +564,7 @@
       render();
       loadWeek();
       scheduleSave();
+      syncReminders();
     }
 
     let weekSeq = 0;
@@ -671,7 +710,7 @@
     }
 
     async function morningCheckin() {
-      if (mode !== 'real' || !template || !view?.queue.length || template.checkinDate === state.date) return;
+      if (mode !== 'real' || !template || template.sample || !view?.queue.length || template.checkinDate === state.date) return;
       template.checkinDate = state.date;
       saveTemplate(); scheduleSave();
       try {
@@ -729,6 +768,9 @@
       renderBanner();
       renderReview();
       renderGoals();
+      renderTrend();
+      renderSampleBar();
+      renderRemind();
       if (!draft) renderEditors();
     }
 
@@ -748,6 +790,95 @@
         ${r.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}</td><td class="n">${hrs(x.targetMin)}h</td><td class="n">${hrs(x.doneMin)}h</td><td class="n ${x.floorKept ? 'ok' : 'warn'}">${x.floorMin ? (x.floorKept ? '✓' : '✗') + ' ' + hrs(x.floorMin) + 'h' : ''}</td></tr>`).join('')}
       </table><p class="hint">${t('reviewLine')(r.tasksDone, r.tasksTotal, hrs(r.debtMin))}</p>`;
     }
+
+    // Week by week: one small chart per role, on one scale of its own.
+    function renderTrend() {
+      const box = $('trend-card');
+      const weeks = [...(template?.history || []), weekData?.review].filter(Boolean);
+      box.hidden = mode !== 'real' || !template || weeks.length < 2;
+      if (box.hidden) return;
+      const shortDate = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
+      const panels = template.roles.map((r) => {
+        const done = weeks.map((w) => w.roles.find((x) => x.id === r.id)?.doneMin || 0);
+        const top = Math.max(r.targetMin, ...done, 60);
+        const bars = done.map((m, i) => `<i class="tb ${i === weeks.length - 1 ? 'cur' : ''}" style="height:${Math.max(3, Math.round((m / top) * 100))}%" title="${esc(t('weekOf')(shortDate(weeks[i].weekStart), hrs(m)))}"></i>`).join('');
+        return `<div style="${rcStyle(r.id)}">
+          <div class="name"><span class="dot"></span>${esc(r.name)}</div>
+          <div class="tbars">${bars}<span class="tgt" style="bottom:${Math.round((r.targetMin / top) * 100)}%"></span></div>
+          <div class="val">${hrs(done.at(-1))}h / ${hrs(r.targetMin)}h</div>
+        </div>`;
+      }).join('');
+      const debts = weeks.slice(0, -1).map((w) => `${hrs(w.debtMin)}h`).join(', ');
+      box.innerHTML = `<h2>${t('trendTitle')}</h2><div class="trend">${panels}</div><p class="hint">${t('trendHint')}${debts ? ` ${t('debtLine')(debts)}.` : ''}</p>`;
+    }
+
+    function renderSampleBar() {
+      const box = $('sample-bar');
+      box.hidden = !(mode === 'real' && template?.sample);
+      if (box.hidden) return;
+      box.innerHTML = `<div class="row" style="justify-content:space-between"><span>${t('sampleBar')}</span><div class="row"><button class="primary small" id="sample-own">${t('setupBtn')}</button><button class="small" id="sample-exit">${t('sampleExit')}</button></div></div>`;
+      $('sample-own').onclick = openSetup;
+      $('sample-exit').onclick = exitSample;
+    }
+    async function loadSample() {
+      // A week the person already has is kept aside, not overwritten.
+      if (template && !template.sample) store.set('meso-own', JSON.stringify(template));
+      setMode('real');
+      apply(await api('/api/sample', { ...today(), lang }));
+      showTab('today');
+    }
+    async function exitSample() {
+      let own = null;
+      try { own = JSON.parse(store.get('meso-own')); } catch {}
+      store.set('meso-own', '');
+      if (own) { template = own; saveTemplate(); apply(await api('/api/day', { template, ...today(), now: realNow() })); return; }
+      template = null;
+      store.set('meso-template', '');
+      setMode('demo');
+      await resetDay('07:00');
+    }
+
+    // Reminders: the times of today's blocks, sent only when they change.
+    let vapidPublic = null, remindKey = '';
+    const remindOn = () => store.get('meso-push') === '1';
+    function renderRemind() {
+      const btn = $('remind');
+      btn.hidden = !vapidPublic || !('PushManager' in window) || mode !== 'real' || !!template?.sample;
+      btn.textContent = remindOn() ? t('remindOff') : t('remindOn');
+    }
+    const keyBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+    async function syncReminders(force = false) {
+      if (!remindOn() || mode !== 'real' || template?.sample || !view) return;
+      try {
+        const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+        if (!sub) return;
+        const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+        const times = [...view.queue, ...view.fixed].map((x) => midnight.getTime() + toMin(x.start) * 60000).filter((at) => at > Date.now()).sort((a, b) => a - b);
+        const key = JSON.stringify(times);
+        if (key === remindKey && !force) return;
+        remindKey = key;
+        await api('/api/reminders', { endpoint: sub.endpoint, times });
+      } catch { /* reminders are optional */ }
+    }
+    $('remind').onclick = async () => {
+      const note = $('remind-status');
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (remindOn()) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) { await api('/api/reminders', { off: true, endpoint: sub.endpoint }); await sub.unsubscribe(); }
+          store.set('meso-push', '');
+          note.textContent = '';
+        } else {
+          if (await Notification.requestPermission() !== 'granted') { note.textContent = t('remindDenied'); return; }
+          await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(vapidPublic) });
+          store.set('meso-push', '1');
+          await syncReminders(true);
+          note.textContent = t('remindSet');
+        }
+        renderRemind();
+      } catch (e) { note.textContent = e.message; }
+    };
 
     function renderReview() {
       const box = $('review-card');
@@ -808,8 +939,9 @@
     function renderGoals() {
       const box = $('goals-card');
       if (mode !== 'real' || !template) {
-        box.innerHTML = `<div class="invite"><h2>${t('goalsTab')}</h2><p>${t('goalsInvite')}</p><button class="primary" id="invite-go">${t('setupBtn')}</button></div>`;
+        box.innerHTML = `<div class="invite"><h2>${t('goalsTab')}</h2><p>${t('goalsInvite')}</p><div class="row" style="justify-content:center"><button class="primary" id="invite-sample">${t('sampleBtn')}</button><button id="invite-go">${t('setupBtn')}</button></div></div>`;
         $('invite-go').onclick = openSetup;
+        $('invite-sample').onclick = loadSample;
         return;
       }
       const goals = template.goals || [];
@@ -844,8 +976,9 @@
       $('edit-goals').hidden = !real;
       $('week-invite').hidden = real;
       if (!real) {
-        $('week-invite').innerHTML = `<div class="invite"><p style="margin-top:0">${t('weekInvite')}</p><button class="primary" id="week-invite-go">${t('setupBtn')}</button></div>`;
+        $('week-invite').innerHTML = `<div class="invite"><p style="margin-top:0">${t('weekInvite')}</p><div class="row" style="justify-content:center"><button class="primary" id="week-invite-sample">${t('sampleBtn')}</button><button id="week-invite-go">${t('setupBtn')}</button></div></div>`;
         $('week-invite-go').onclick = openSetup;
+        $('week-invite-sample').onclick = loadSample;
         return;
       }
       const d = draft || template;
@@ -944,6 +1077,7 @@
     $('setup-mic').onclick = () => startMic('setup');
     async function startMic(target) {
       if (recorder) { recorder.stop(); return; }
+      if (!askConsent()) return;
       micTarget = target;
       const btn = target === 'setup' ? $('setup-mic') : $('mic');
       const status = target === 'setup' ? $('setup-status') : $('status');
@@ -981,42 +1115,52 @@
       status.textContent = t('listening');
     }
 
-    // Streams the microphone as 24 kHz PCM and shows words as they come.
-    // finish() resolves with the text, or '' if live voice did not work, in
-    // which case the recording is transcribed the old way and nothing is lost.
+    // The microphone as 24 kHz 16-bit PCM, about 85 ms a frame.
+    function micFrames(stream, onFrame) {
+      const ctx = new AudioContext({ sampleRate: 24000 });
+      const node = ctx.createScriptProcessor(2048, 1, 1);
+      node.onaudioprocess = (e) => {
+        const pcm = e.inputBuffer.getChannelData(0);
+        const out = new Int16Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) out[i] = Math.max(-1, Math.min(1, pcm[i])) * 0x7fff;
+        onFrame(out.buffer);
+      };
+      ctx.createMediaStreamSource(stream).connect(node);
+      node.connect(ctx.destination);
+      ctx.resume();
+      return () => { try { node.disconnect(); ctx.close(); } catch {} };
+    }
+    const voiceUrl = (q = '') => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice${q}`;
+
+    // Shows words as they come. finish() resolves with the text, or '' if live
+    // voice did not work, in which case the recording is transcribed the old
+    // way and nothing is lost.
     function startLive(stream, status) {
       let finals = '', partial = '', failed = false, closed;
       const whenClosed = new Promise((r) => { closed = r; });
-      let ws, ctx, node;
-      const early = [];
+      let ws, stopMic;
+      const early = []; // the connection takes about a second; the first words wait for it
       try {
-        ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice`);
+        ws = new WebSocket(voiceUrl());
         ws.binaryType = 'arraybuffer';
+        ws.onopen = () => early.splice(0).forEach((b) => ws.send(b));
         ws.onmessage = ({ data }) => {
           const m = JSON.parse(data);
           if (m.type === 'error') { failed = true; return; }
+          if (m.type !== 'transcript') return;
           if (m.final) { finals = `${finals} ${m.text}`.trim(); partial = ''; } else partial = m.text;
           status.textContent = `${finals} ${partial}`.trim() || t('listening');
         };
-        ws.onopen = () => early.splice(0).forEach((b) => ws.send(b));
         ws.onerror = () => { failed = true; };
         ws.onclose = () => closed();
-        ctx = new AudioContext({ sampleRate: 24000 });
-        node = ctx.createScriptProcessor(2048, 1, 1); // about 85 ms a frame
-        node.onaudioprocess = (e) => {
-          if (ws.readyState > 1) return;
-          const pcm = e.inputBuffer.getChannelData(0);
-          const out = new Int16Array(pcm.length);
-          for (let i = 0; i < pcm.length; i++) out[i] = Math.max(-1, Math.min(1, pcm[i])) * 0x7fff;
-          // The connection takes about a second; the first words wait for it.
-          if (ws.readyState === 0) early.push(out.buffer); else ws.send(out.buffer);
-        };
-        ctx.createMediaStreamSource(stream).connect(node);
-        node.connect(ctx.destination);
+        stopMic = micFrames(stream, (frame) => {
+          if (ws.readyState === 0) early.push(frame);
+          else if (ws.readyState === 1) ws.send(frame);
+        });
       } catch { failed = true; closed(); }
       return {
         async finish() {
-          try { node?.disconnect(); ctx?.close(); } catch {}
+          stopMic?.();
           if (ws?.readyState === 1) ws.send('{"type":"endStream"}'); else closed();
           await Promise.race([whenClosed, new Promise((r) => setTimeout(r, 5000))]);
           try { ws?.close(); } catch {}
@@ -1024,6 +1168,94 @@
         },
       };
     }
+
+    // AI call: the model hears when a sentence ends, the agent acts through
+    // the same checked tools, and the device reads the answer aloud. Meta has
+    // no speech output yet, so the voice is the browser's own. While the AI
+    // works or talks, silence is sent instead of the mic, so it never hears
+    // itself; the stream must keep flowing or the server closes it.
+    let callNow = null;
+    const SILENCE = new Int16Array(2048).buffer;
+    const VI_CHARS = /[đăâêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
+    function callPhase(p) {
+      if (!callNow) return;
+      callNow.phase = p;
+      $('call-phase').textContent = t(`call_${p}`);
+    }
+    function speakOut(text) {
+      return new Promise((resolve) => {
+        const synth = window.speechSynthesis;
+        const want = VI_CHARS.test(text) ? 'vi' : 'en';
+        const voice = synth?.getVoices().find((v) => v.lang.toLowerCase().startsWith(want));
+        if (!voice) { $('call-note').textContent = t('noVoice'); setTimeout(resolve, Math.min(5000, 1000 + text.length * 40)); return; }
+        const u = new SpeechSynthesisUtterance(text);
+        u.voice = voice;
+        u.lang = voice.lang;
+        const guard = setTimeout(resolve, 4000 + text.length * 150); // some browsers never fire onend
+        u.onend = u.onerror = () => { clearTimeout(guard); resolve(); };
+        synth.cancel();
+        synth.speak(u);
+      });
+    }
+    function spokenAnswer(done) {
+      const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
+      const p = done.proposal;
+      const options = p ? p.options.map((ids, i) => `${t('optionN')(i + 1)}: ${ids.map(title).join(', ')}.`).join(' ') : '';
+      return `${done.reply || p?.message || ''} ${options}`.trim();
+    }
+    async function callTurn(text) {
+      callPhase('thinking');
+      $('call-live').textContent = text;
+      $('call-reply').textContent = '';
+      const done = await send(text, null, { call: true });
+      if (!callNow) return;
+      const line = done ? spokenAnswer(done) : $('status').textContent || t('errNet');
+      $('call-reply').textContent = line;
+      callPhase('speaking');
+      await speakOut(line);
+      callPhase('listening');
+    }
+    async function startCall() {
+      if (callNow || !askConsent()) return;
+      // Browsers only allow speech that starts from a tap, so it starts here.
+      window.speechSynthesis?.getVoices();
+      window.speechSynthesis?.speak(new SpeechSynthesisUtterance(''));
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+      catch { $('status').textContent = t('noMic'); return; }
+      showTab('today');
+      const ws = new WebSocket(voiceUrl('?call=1'));
+      ws.binaryType = 'arraybuffer';
+      callNow = { ws, stream, phase: 'speaking', stopMic: null };
+      $('call-box').hidden = false;
+      $('call-live').textContent = ''; $('call-reply').textContent = ''; $('call-note').textContent = '';
+      callPhase('speaking');
+      ws.onmessage = ({ data }) => {
+        const m = JSON.parse(data);
+        if (!callNow || callNow.phase !== 'listening') return;
+        if (m.type === 'transcript' && m.text) $('call-live').textContent = m.text;
+        if (m.type === 'turn' && m.text.trim()) callTurn(m.text.trim());
+      };
+      ws.onclose = () => endCall();
+      ws.onerror = () => { $('status').textContent = t('errNet'); };
+      callNow.stopMic = micFrames(stream, (frame) => {
+        if (ws.readyState === 1) ws.send(callNow?.phase === 'listening' ? frame : SILENCE);
+      });
+      await speakOut(t('callHello'));
+      callPhase('listening');
+    }
+    function endCall() {
+      if (!callNow) return;
+      const { ws, stream, stopMic } = callNow;
+      callNow = null;
+      stopMic?.();
+      stream.getTracks().forEach((tr) => tr.stop());
+      try { ws.close(); } catch {}
+      window.speechSynthesis?.cancel();
+      $('call-box').hidden = true;
+    }
+    $('call').onclick = startCall;
+    $('call-end').onclick = endCall;
 
     async function toWav(blob) {
       const ctx = new AudioContext({ sampleRate: 16000 });
@@ -1064,15 +1296,25 @@
     $('send').onclick = () => send();
 
     // Agent call, streamed: each tool step appears as soon as it happens.
-    async function send(textArg, image = null) {
+    function askConsent() {
+      if (consented()) return true;
+      if (!confirm(`${t('consentText')} ${t('consentLink')}${t('consentTail')}`)) return false;
+      giveConsent();
+      return true;
+    }
+
+    // Memory of the conversation, and a proposal still waiting for an answer.
+    let chatLog = [], pendingProposal = null;
+    async function send(textArg, image = null, opts = {}) {
       const text = (textArg ?? $('say').value).trim();
-      if (!text) return;
+      if (!text) return null;
+      if (!opts.demo && !askConsent()) return null;
       $('send').disabled = true;
       $('status').textContent = image ? t('readingPhoto') : t('thinking');
       $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
       const started = Date.now();
       try {
-        const res = await fetch('/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true }) });
+        const res = await fetch('/api/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
         if (!res.ok || !res.body) throw new Error(errMsg(await res.json().catch(() => ({}))));
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -1095,11 +1337,15 @@
         apply(done);
         syncAgent(before);
         count('replan');
+        chatLog.push({ role: 'user', content: text }, { role: 'assistant', content: done.reply });
+        pendingProposal = done.proposal || null;
         $('say').value = '';
         showAnswer(done);
         $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s`;
+        return done;
       } catch (e) {
         $('status').textContent = e.message;
+        return null;
       } finally {
         $('send').disabled = false;
       }
@@ -1121,6 +1367,7 @@
         b.onclick = async () => {
           const ids = p.options[Number(b.dataset.opt)];
           apply(await api('/api/approve', { state, ids }));
+          pendingProposal = null;
           count('approve');
           if (mode === 'real' && template) { for (const id of ids) { const task = template.tasks.find((x) => x.id === id); if (task) task.debt = true; } saveTemplate(); }
           $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p>`;
@@ -1137,7 +1384,7 @@
       $('say').value = t('demoText');
       cap('cap2');
       $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await send();
+      await send(undefined, null, { demo: true });
       cap('cap3');
     }
 
@@ -1158,7 +1405,8 @@
       $('setup-status').textContent = t('building');
       try {
         const data = await api('/api/setup', { text, image: setupImage, ...today(), now: realNow(), lang });
-        data.template.history = template?.history || [];
+        data.template.history = template?.sample ? [] : template?.history || [];
+        store.set('meso-own', '');
         setMode('real');
         if (!sid) $('setup-status').textContent = t('signedOut');
         $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
@@ -1174,7 +1422,7 @@
 
     // Real mode follows the real clock; a new day is built from the template.
     async function tick() {
-      if (mode !== 'real' || !state || $('send').disabled) return;
+      if (mode !== 'real' || !state || template?.sample || $('send').disabled) return;
       const d = today();
       if (state.date !== d.date && template) { apply(await api('/api/day', { template, state, ...d, now: realNow() })); morningCheckin(); return; }
       if (realNow() > state.now) { state.now = realNow(); await refresh(); }
@@ -1227,7 +1475,7 @@
       await initAccount();
       try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
       setMode(mode);
-      if (mode === 'real' && template) { state = state || null; await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); morningCheckin(); }
+      if (mode === 'real' && template) { state = state || null; await tick(); if (state) { if (!template.sample) state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); morningCheckin(); }
       else if (state) await refresh(); else await resetDay();
     })();
   </script>
