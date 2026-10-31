@@ -42,6 +42,17 @@ The model never edits the plan. It calls six tools (`get_state`, `add_fixed`, `a
 
 Both chat providers speak the OpenAI Chat Completions format, so `src/models.js` switches with one setting. The model picker in the app runs the same agent, tools and rules on either model.
 
+## Muse Spark vs Muse Spark Open
+
+The same agent, tools and rules on both models, 10 scenarios in English and Vietnamese (`scripts/benchmark.js`, details in `docs/BENCHMARK.md`):
+
+| Model | Runs | Task done, rules kept | No rejected call | Median model calls | Median time |
+|---|---|---|---|---|---|
+| Muse Spark 1.3 | 20 | 18/20 (90%) | 20/20 (100%) | 3 | 9.9s |
+| Muse Spark Open | 20 | 19/20 (95%) | 20/20 (100%) | 3 | 9.6s |
+
+The open-weight model is as reliable as the hosted one on this agent. Code-checked cut options in the plan (see `cutOptions` in `src/tools.js`) cut the median turn from 30 to 50 seconds to about 10.
+
 ## Stress test: 100,000 broken days
 
 The planner's promises are written as checks in `src/invariants.js`: never plan into sleep, never move a fixed event, never let a task silently disappear, never fill more than the fill ratio, never cut without asking, never go under a floor silently. `scripts/simulate.js` lives through randomly broken days (late starts, overruns, interruptions, skips, new work) and runs every check after every re-plan:
