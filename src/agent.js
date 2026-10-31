@@ -1,9 +1,9 @@
 // The agent loop: the model reads the state and proposes through tools,
 // tools.js checks every call. The model never touches the state directly.
-import { TOOLS, runTool } from './tools.js';
-import { WEEK_TOOLS, WEEK_TOOL_NAMES, ACCEPT_TOOL, runWeekTool } from './week-tools.js';
-import { rebaseDay } from './setup.js';
-import { applyEvent } from './planner.js';
+import { TOOLS, runTool } from '../public/core/tools.js';
+import { WEEK_TOOLS, WEEK_TOOL_NAMES, ACCEPT_TOOL, runWeekTool } from '../public/core/week-tools.js';
+import { rebaseDay } from '../public/core/setup.js';
+import { applyEvent } from '../public/core/planner.js';
 
 export const SYSTEM_PROMPT = `You are Mesocycle, a planning agent. You protect the user's deadlines and
 life floors, not the clock. Only fixed events (classes, exams, meetings,

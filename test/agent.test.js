@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runTool } from '../src/tools.js';
+import { runTool } from '../public/core/tools.js';
 import { runAgent } from '../src/agent.js';
-import { demoState } from '../src/demo-state.js';
-import { toMin } from '../src/planner.js';
+import { demoState } from '../public/core/demo-state.js';
+import { toMin } from '../public/core/planner.js';
 
 // A scripted fake model: each step returns the next prepared answer.
 function fakeModel(steps) {

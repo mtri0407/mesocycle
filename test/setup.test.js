@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, validateNext, adoptNext, checkTemplate } from '../src/setup.js';
-import { replan } from '../src/planner.js';
-import { runWeekTool } from '../src/week-tools.js';
+import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, validateNext, adoptNext, checkTemplate } from '../public/core/setup.js';
+import { replan } from '../public/core/planner.js';
+import { runWeekTool } from '../public/core/week-tools.js';
 import { runAgent } from '../src/agent.js';
-import { sampleWeek } from '../src/sample.js';
-import { checkPlan } from '../src/invariants.js';
+import { sampleWeek } from '../public/core/sample.js';
+import { checkPlan } from '../public/core/invariants.js';
 
 const week = (over = {}) => ({
   roles: [{ name: 'Study', priority: 1, weeklyHours: 20, floorHours: 12 }, { name: 'Family', priority: 2, weeklyHours: 2, floorHours: 2 }],

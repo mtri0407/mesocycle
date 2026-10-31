@@ -143,6 +143,9 @@
     .tb { flex: 1; max-width: 22px; min-height: 2px; background: var(--rc); border-radius: 4px 4px 0 0; }
     .tb.cur { opacity: .5; }
     .tgt { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); }
+    #promises summary { color: var(--ok); font-weight: 500; }
+    #promises.bad summary { color: var(--bad); }
+    #promises li { list-style: none; margin-left: -20px; padding: 2px 0; }
     .invite { text-align: center; padding: 28px 16px; }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   </style>
@@ -164,6 +167,7 @@
   </header>
   <main>
     <div id="p-today">
+    <section class="card caption" id="offline-bar" hidden data-t="offlineNote" style="margin:0 0 14px"></section>
     <section class="card caption" id="sample-bar" hidden style="margin:0 0 14px"></section>
     <section class="card caption" id="week-banner" hidden style="margin:0 0 14px"></section>
     <section class="card intro" id="intro"></section>
@@ -188,6 +192,8 @@
       <summary data-t="timeline"></summary>
       <div class="tl" id="tl" style="margin-top:12px"></div>
     </details>
+
+    <details class="card" id="promises"><summary id="promises-sum"></summary><ul id="promises-list" style="margin:10px 0 0;padding-left:20px;font-size:14px"></ul></details>
 
     <section class="card">
       <h2 data-t="changed"></h2>
@@ -285,7 +291,11 @@
     </section>
   </main>
 
-  <script>
+  <script type="module">
+    import { handlers } from '/core/handlers.js';
+    import { replan } from '/core/planner.js';
+    import { checkPlan } from '/core/invariants.js';
+
     const T = {
       en: {
         intro: `<h2>What is this?</h2>
@@ -326,7 +336,10 @@
         cap1: 'It is 5pm. The afternoon is gone and the evening no longer fits everything.',
         cap2: 'The agent gets one sentence and re-plans through checked tools. Watch the steps below.',
         cap3: 'Approve the suggestion, or pick the alternative. Nothing was cut without asking.',
-        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, unsaved: 'Not saved yet', fellBack: 'Answered by Muse Spark Open (Meta was busy)', callBtn: '📞 Call AI', callEnd: 'End call', call_listening: 'Listening...', call_thinking: 'Working on it...', call_speaking: 'Talking...',
+        date: 'Fri 30 Oct', statsLine: (s) => `So far: ${s.days.length} days, ${s.replans} re-plans, ${(s.doneMin / 60).toFixed(1)}h done, ${(s.debtRepaidMin / 60).toFixed(1)}h of debt paid back.`, promises: ['Sleep is never touched, and nothing starts in the past', 'Nothing overlaps a class, a meeting or another task', 'Fixed events never move', 'No task quietly disappears', 'At most 60% of free time is planned', 'Nothing is cut without asking you', 'A task is only cut if it truly does not fit', 'Going under a weekly minimum is never silent'],
+        promisesOk: (a, b) => `${a} of ${b} promises holding, checked on this device`, promisesBad: (n) => `${n} promises broken. This is a bug, please send feedback`,
+        offlineNote: 'You are offline. Everything works except the AI.', offlineAi: 'The AI needs a connection. Everything else still works.',
+        unsaved: 'Not saved yet', fellBack: 'Answered by Muse Spark Open (Meta was busy)', callBtn: '📞 Call AI', callEnd: 'End call', call_listening: 'Listening...', call_thinking: 'Working on it...', call_speaking: 'Talking...',
         callHello: 'I am listening. What changed?', noVoice: 'This device has no voice for this language, so the answer is shown as text.', optionN: (n) => `Option ${n}`,
         sampleBtn: '👀 See a sample week', sampleBar: 'This is a made-up sample week. Press things, nothing is saved.', sampleExit: 'Exit sample',
         trendTitle: 'Week by week', trendHint: 'Bars are real hours. The dashed line is the target. The lighter bar is this week so far.', debtLine: (list) => `Debt at the end of each week: ${list}`, weekOf: (d, h) => `Week of ${d}: ${h}h`,
@@ -393,7 +406,10 @@
         cap1: 'Bây giờ là 17:00. Buổi chiều đã mất, buổi tối không còn đủ chỗ cho mọi việc.',
         cap2: 'Agent nhận một câu và xếp lại qua các tool có kiểm tra. Xem từng bước bên dưới.',
         cap3: 'Bấm Đồng ý, hoặc chọn phương án còn lại. Không việc nào bị cắt mà không hỏi.',
-        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, unsaved: 'Chưa lưu', fellBack: 'Muse Spark Open trả lời thay (Meta đang bận)', callBtn: '📞 Gọi AI', callEnd: 'Kết thúc', call_listening: 'Đang nghe...', call_thinking: 'Đang xử lý...', call_speaking: 'Đang nói...',
+        date: 'Thứ Sáu 30/10', statsLine: (s) => `Đến nay: ${s.days.length} ngày, ${s.replans} lần xếp lại, ${(s.doneMin / 60).toFixed(1)} giờ đã làm, ${(s.debtRepaidMin / 60).toFixed(1)} giờ nợ đã trả.`, promises: ['Không đụng tới giờ ngủ, không xếp việc vào quá khứ', 'Không chồng lên lớp học, lịch họp hay việc khác', 'Lịch cố định không bao giờ bị dời', 'Không việc nào âm thầm biến mất', 'Chỉ lấp tối đa 60% giờ rảnh', 'Không cắt việc khi chưa hỏi bạn', 'Chỉ cắt khi việc đó thật sự không vừa', 'Xuống dưới mức tối thiểu tuần không bao giờ âm thầm'],
+        promisesOk: (a, b) => `${a} trên ${b} lời hứa đang giữ, kiểm tra ngay trên máy bạn`, promisesBad: (n) => `${n} lời hứa bị phá. Đây là lỗi, hãy gửi góp ý giúp mình`,
+        offlineNote: 'Bạn đang ngoại tuyến. Mọi thứ vẫn chạy, trừ AI.', offlineAi: 'AI cần có mạng. Mọi thứ khác vẫn chạy.',
+        unsaved: 'Chưa lưu', fellBack: 'Muse Spark Open trả lời thay (Meta đang bận)', callBtn: '📞 Gọi AI', callEnd: 'Kết thúc', call_listening: 'Đang nghe...', call_thinking: 'Đang xử lý...', call_speaking: 'Đang nói...',
         callHello: 'Mình nghe đây. Có gì thay đổi không?', noVoice: 'Thiết bị này chưa có giọng đọc cho ngôn ngữ này, câu trả lời hiện bằng chữ.', optionN: (n) => `Cách ${n}`,
         sampleBtn: '👀 Xem tuần mẫu', sampleBar: 'Đây là tuần mẫu dựng sẵn. Cứ bấm thử, không có gì được lưu.', sampleExit: 'Thoát tuần mẫu',
         trendTitle: 'Theo từng tuần', trendHint: 'Cột là số giờ thật. Vạch đứt là mục tiêu giờ. Cột nhạt là tuần này tới nay.', debtLine: (list) => `Nợ cuối mỗi tuần: ${list}`, weekOf: (d, h) => `Tuần ${d}: ${h} giờ`,
@@ -530,7 +546,7 @@
       } catch (e) { $('account-text').textContent = e.message; }
     }
     async function initAccount() {
-      try { const c = await api('/api/config'); googleClientId = c.googleClientId; vapidPublic = c.vapidPublic; } catch {}
+      try { const c = await api('/api/config'); googleClientId = c.googleClientId; vapidPublic = c.vapidPublic; offline(false); } catch { offline(true); }
       if (sid) {
         const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
         if (r && r.ok) { account = r.user; useCloud(r.data); } else signOutLocal();
@@ -580,6 +596,13 @@
 
     const errMsg = (d) => (d && d.code === 'rate' ? t('errRate') : d && d.code === 'cap' ? t('errCap') : (d && d.error) || t('errNet'));
     async function api(path, body) {
+      // Planning runs here in the browser. Only AI and accounts use the network.
+      const [route, query] = path.split('?');
+      if (handlers[route]) {
+        const data = JSON.parse(JSON.stringify(handlers[route](body || Object.fromEntries(new URLSearchParams(query)))));
+        if (!data.ok && !data.state) throw new Error(errMsg(data));
+        return data;
+      }
       let res;
       try { res = await fetch(path, body ? { method: 'POST', headers: aiHeaders, body: JSON.stringify(body) } : {}); }
       catch { throw new Error(t('errNet')); }
@@ -712,6 +735,7 @@
         ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">${t('fixed')}: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
 
       renderTimeline();
+      renderPromises();
       const debt = view.debtMinutes;
       $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
         const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
@@ -794,6 +818,21 @@
     const realDay = () => (mode === 'real' ? new Date().getDay() : 5);
 
     let weekData = null, reviewOpen = false, nextPlan = null, draft = null;
+
+    // The eight promises, checked after every change, right here on this device.
+    function renderPromises() {
+      const errors = checkPlan(state, replan(state));
+      const broken = new Set(errors.map((e) => PROMISE_OF(e)));
+      const list = t('promises');
+      const kept = list.length - broken.size;
+      $('promises-sum').textContent = broken.size ? `✗ ${t('promisesBad')(broken.size)}` : `✓ ${t('promisesOk')(kept, list.length)}`;
+      $('promises').classList.toggle('bad', broken.size > 0);
+      $('promises-list').innerHTML = list.map((p, i) => `<li class="${broken.has(i) ? 'no' : ''}">${broken.has(i) ? '✗' : '✓'} ${esc(p)}</li>`).join('');
+    }
+    const PROMISE_OF = (e) => {
+      const key = ['sleep', 'wake', 'past', 'overlap', 'fixed moved', 'lost', 'overfilled', 'silent cut', 'needless cut', 'silent floor'].findIndex((k) => e.startsWith(k));
+      return [0, 0, 0, 1, 2, 3, 4, 5, 6, 7][key] ?? 0;
+    };
 
     function renderExtras() {
       renderBanner();
@@ -1339,6 +1378,7 @@
     async function send(textArg, image = null, opts = {}) {
       const text = (textArg ?? $('say').value).trim();
       if (!text) return null;
+      if (!navigator.onLine) { $('status').textContent = t('offlineAi'); return null; }
       if (!opts.demo && !askConsent()) return null;
       $('send').disabled = true;
       $('status').textContent = image ? t('readingPhoto') : t('thinking');
@@ -1347,6 +1387,7 @@
       try {
         const res = await fetch('/api/agent', { method: 'POST', headers: aiHeaders, body: JSON.stringify({ state, text, image, provider: $('provider').value, stream: true, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
         if (!res.ok || !res.body) throw new Error(errMsg(await res.json().catch(() => ({}))));
+        offline(false);
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = '', done = null;
@@ -1375,7 +1416,9 @@
         $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s${done.fellBack ? ` · ${t('fellBack')}` : ''}`;
         return done;
       } catch (e) {
-        $('status').textContent = e.message;
+        const noNet = e instanceof TypeError;
+        if (noNet) offline(true);
+        $('status').textContent = noNet ? t('offlineAi') : e.message;
         return null;
       } finally {
         $('send').disabled = false;
@@ -1499,6 +1542,12 @@
     };
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // navigator.onLine can be wrong, so a failed request also counts.
+    const offline = (on) => { $('offline-bar').hidden = !on; };
+    const onlineBar = () => offline(!navigator.onLine);
+    addEventListener('online', onlineBar);
+    addEventListener('offline', onlineBar);
+    onlineBar();
 
     (async () => {
       showTab(tab);

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toMin, toHHMM, freeWindows, replan, applyEvent, debtByRole, learnPace, adjustEstimate, deadlineRisk,
-} from '../src/planner.js';
-import { checkPlan } from '../src/invariants.js';
+} from '../public/core/planner.js';
+import { checkPlan } from '../public/core/invariants.js';
 
 const settings = { wake: toMin('07:00'), sleep: toMin('23:00'), fillRatio: 1, bufferMin: 15 };
 const item = (id, minutes, rank = 1, roleId = 'study') => ({ id, minutes, rank, roleId, status: 'todo' });

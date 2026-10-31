@@ -2,8 +2,8 @@
 // re-plan that no promise in src/invariants.js is broken.
 //   node scripts/simulate.js [days] [seed]
 // Same seed, same days: a failure can always be replayed exactly.
-import { replan, applyEvent, toHHMM } from '../src/planner.js';
-import { checkPlan } from '../src/invariants.js';
+import { replan, applyEvent, toHHMM } from '../public/core/planner.js';
+import { checkPlan } from '../public/core/invariants.js';
 
 const DAYS = Number(process.argv[2] || 100000);
 const SEED = Number(process.argv[3] || 20261027);

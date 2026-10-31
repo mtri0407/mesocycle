@@ -6,9 +6,12 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "node --test \"test/**/*.test.js\"",
-    "simulate": "node scripts/simulate.js"
+    "simulate": "node scripts/simulate.js",
+    "e2e": "node scripts/e2e.mjs",
+    "benchmark": "node scripts/benchmark.js"
   },
   "devDependencies": {
+    "playwright": "1.62.1",
     "wrangler": "^4.134.0"
   },
   "allowScripts": {

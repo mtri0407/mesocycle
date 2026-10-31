@@ -6,9 +6,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { chat } from '../src/models.js';
 import { runAgent } from '../src/agent.js';
-import { replan, toMin } from '../src/planner.js';
-import { checkPlan } from '../src/invariants.js';
-import { demoState } from '../src/demo-state.js';
+import { replan, toMin } from '../public/core/planner.js';
+import { checkPlan } from '../public/core/invariants.js';
+import { demoState } from '../public/core/demo-state.js';
 
 const env = Object.fromEntries(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8')
   .split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && l.includes('='))

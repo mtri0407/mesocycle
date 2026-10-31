@@ -1,17 +1,13 @@
-// Cloudflare Worker: serves the API. The web app itself comes from public/.
-// API keys live only here (env), never in the browser.
-// The browser keeps the plan and sends it with each request. Signed-in users
-// also get a saved copy in KV (see auth.js).
+// Cloudflare Worker: only what the browser cannot do alone, which is calling
+// models (API keys live here, never in the browser), accounts and reminders.
+// Planning itself runs in the browser, from public/core/. The agent runs the
+// same code here, so a tool call is checked by the same rules on both sides.
 import { chat, chatSafe, transcribe } from './models.js';
 import { runAgent, noDashes } from './agent.js';
-import { runTool } from './tools.js';
-import { applyEvent } from './planner.js';
-import { demoState } from './demo-state.js';
-import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, forecastWeek, CHECKIN_PROMPT, checkinBrief, rollover, rebaseDay, adoptNext, mondayOf, goalPace, weekReview, checkTemplate, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from './setup.js';
-import { replan, toHHMM } from './planner.js';
+import { view } from '../public/core/handlers.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, CHECKIN_PROMPT, checkinBrief, mondayOf, weekReview, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from '../public/core/setup.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
 import { voiceProxy } from './voice.js';
-import { sampleWeek } from './sample.js';
 import { saveReminders, deleteReminders, sendDue } from './push.js';
 
 function json(data, status = 200) {
@@ -21,12 +17,10 @@ function json(data, status = 200) {
   });
 }
 
-const view = (state) => runTool(state, 'get_state', {}).result;
-
 const AGENT_EFFORT = 'low'; // docs/BENCHMARK.md: the lowest level that kept the score
 
-// Guard for routes that call a model: at most 12 a minute per visitor
-// (Cloudflare rate limit binding) and a daily ceiling for the whole app (KV).
+// Guard for routes that call a model or write to KV: a limit per visitor and
+// per network (Cloudflare rate limit bindings), and a daily ceiling (KV).
 const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/model-check', '/api/feedback', '/api/reminders'];
 const MAX_IMAGE_CHARS = 8e6;
 const SOFT_CAP = 1200; // about 10 USD a day of Meta credit; past it, the open model answers
@@ -114,28 +108,8 @@ export default {
         return json({ ok: true, provider: out.provider, ms: out.ms, text: out.text });
       }
 
-      // Fresh demo day. ?now=HH:MM sets the clock for demos.
-      if (url.pathname === '/api/demo') {
-        const [h, m] = (url.searchParams.get('now') || '07:00').split(':').map(Number);
-        const state = demoState(h * 60 + m, url.searchParams.get('lang') === 'vi' ? 'vi' : 'en');
-        return json({ ok: true, state, view: view(state) });
-      }
-
-      // Buttons on the Now card (done, more time, skip) run a tool directly, no model needed.
-      if (url.pathname === '/api/tool' && body) {
-        const res = runTool(body.state, body.name, body.args || {});
-        return json({ ok: res.ok, error: res.error, state: res.state, view: view(res.state) });
-      }
-
-      // The user approved one option of a cut proposal.
-      if (url.pathname === '/api/approve' && body) {
-        const state = applyEvent(body.state, { type: 'cut', ids: body.ids });
-        return json({ ok: true, state, view: view(state) });
-      }
-
-      // Free text (later: voice) goes to the agent.
+      // Text, voice and photos go to the agent.
       if (url.pathname === '/api/agent' && body) {
-        // Photos always go to Muse Spark (image understanding).
         const chosen = body.provider === 'open' ? 'open' : 'meta';
         const provider = overBudget ? 'open' : chosen;
         if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
@@ -235,54 +209,11 @@ export default {
         return json({ ok: false, error: 'Could not build a valid week, try describing it again.', steps, modelMs }, 422);
       }
 
-      // A made-up week for new visitors, clearly labelled in the app.
-      if (url.pathname === '/api/sample' && body) {
-        const template = sampleWeek(body);
-        const state = buildDay(template, { date: body.date, weekday: body.weekday, now: 9 * 60 });
-        return json({ ok: true, template, state, view: view(state) });
-      }
-
       // Reminders: a push address and today's times, never task names.
       if (url.pathname === '/api/reminders' && body) {
         if (body.off) await deleteReminders(env, String(body.endpoint));
         else await saveReminders(env, { endpoint: String(body.endpoint), times: body.times });
         return json({ ok: true });
-      }
-
-      // Today's plan from a saved weekly template (a new day, or after edits).
-      if (url.pathname === '/api/day' && body) {
-        const out = rollover(body.template, body.state || null, { date: body.date, weekday: body.weekday, now: body.now });
-        return json({ ok: true, ...out, view: view(out.state) });
-      }
-
-      // The user edited the plan by hand: check it, then update today in place.
-      if (url.pathname === '/api/edit' && body) {
-        const template = body.next ? adoptNext(body.template, body.next) : body.template;
-        const errors = checkTemplate(template, body.lang);
-        if (errors.length) return json({ ok: false, error: errors[0], errors }, 422);
-        const state = rebaseDay(template, body.state, { weekday: body.weekday });
-        return json({ ok: true, template, state, view: view(state) });
-      }
-
-      // Rest-of-week forecast: where today's debt and open work would land.
-      // Demo mode has no weekly template, so today's debt is the backlog.
-      if (url.pathname === '/api/week' && body) {
-        const s = body.state;
-        const placed = replan(s).placed.map((p) => p.id);
-        const template = body.template || {
-          roles: s.roles,
-          fixed: [],
-          tasks: s.queue.filter((q) => q.status === 'skipped' || q.status === 'cut' || (q.status === 'todo' && !placed.includes(q.id)))
-            .map((q) => ({ ...q, status: 'todo' })),
-          wake: toHHMM(s.settings.wake),
-          sleep: toHHMM(s.settings.sleep),
-        };
-        const done = s.queue.filter((q) => q.status === 'done').map((q) => q.id);
-        return json({
-          ok: true,
-          ...forecastWeek(template, { weekday: body.weekday, exclude: [...placed, ...done] }),
-          ...(body.template ? { review: weekReview(body.template), goals: goalPace(body.template, { weekday: body.weekday, date: body.date }) } : {}),
-        });
       }
 
       // Accounts: Google sign-in, then one saved plan per person.

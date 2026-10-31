@@ -1,0 +1,197 @@
+// End-to-end checks in a real browser. Needs no API key: nothing here calls a
+// model unless --ai is given.
+//   npx wrangler dev --port 8799        (in another terminal)
+//   node scripts/e2e.mjs                against http://localhost:8799
+//   BASE=https://... node scripts/e2e.mjs --ai
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+
+const BASE = process.env.BASE || 'http://localhost:8799';
+const AI = process.argv.includes('--ai');
+const browser = await chromium.launch();
+const failures = [];
+let checks = 0;
+
+async function open({ time = '2026-11-03T10:00:00+07:00', viewport = { width: 390, height: 844 }, sw = 'block', seed = null } = {}) {
+  const ctx = await browser.newContext({ viewport, locale: 'en-US', timezoneId: 'Asia/Ho_Chi_Minh', serviceWorkers: sw });
+  if (seed) await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); } }, seed);
+  const page = await ctx.newPage();
+  await page.clock.setFixedTime(new Date(time));
+  page.apiCalls = [];
+  page.errors = [];
+  page.on('request', (r) => { if (new URL(r.url()).pathname.startsWith('/api/')) page.apiCalls.push(new URL(r.url()).pathname); });
+  page.on('pageerror', (e) => page.errors.push(e.message));
+  page.on('dialog', (d) => d.accept());
+  await page.goto(BASE);
+  await page.waitForSelector('#now-card .now-title');
+  return page;
+}
+
+async function check(name, fn) {
+  checks++;
+  try {
+    await fn();
+    console.log(`ok    ${name}`);
+  } catch (e) {
+    failures.push(name);
+    console.log(`FAIL  ${name}\n      ${String(e.message).split('\n')[0].slice(0, 160)}`);
+  }
+}
+const overflow = (p) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+const local = (p, key) => p.evaluate((k) => JSON.parse(localStorage.getItem(k)), key);
+
+await check('demo: planning needs no network, every promise holds', async () => {
+  const p = await open();
+  p.apiCalls.length = 0;
+  const first = await p.textContent('.now-title');
+  await p.click('[data-act=done]');
+  await p.waitForFunction((f) => document.querySelector('.now-title').textContent !== f, first);
+  await p.click('[data-act=more]');
+  await p.click('[data-act=skip]');
+  await p.click('[data-tab=week]');
+  await p.click('[data-tab=goals]');
+  await p.click('[data-tab=today]');
+  const planning = p.apiCalls.filter((a) => !['/api/config', '/api/data'].includes(a));
+  assert.deepEqual(planning, []);
+  assert.match(await p.textContent('#promises-sum'), /8 of 8/);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('layout: no sideways scroll on a phone', async () => {
+  const p = await open();
+  for (const tab of ['today', 'week', 'goals']) {
+    await p.click(`[data-tab=${tab}]`);
+    assert.equal(await overflow(p), 0, tab);
+  }
+  await p.context().close();
+});
+
+await check('sample week: goals, trend, a warning, nothing counted', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  await p.click('[data-tab=goals]');
+  assert.ok((await p.locator('.goal').count()) >= 4);
+  assert.match(await p.textContent('#goals-card'), /Falling behind/);
+  await p.click('[data-tab=week]');
+  await p.waitForSelector('#trend-card:not([hidden]) .tb');
+  assert.equal(await p.locator('.trend > div').count(), 4);
+  await p.click('[data-tab=today]');
+  await p.click('[data-act=done]');
+  assert.equal((await local(p, 'meso-stats'))?.doneMin ?? 0, 0);
+  await p.click('#sample-exit');
+  await p.waitForFunction(() => localStorage.getItem('meso-mode') === 'demo');
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('hand edits: saved at once, finished work survives, bad input refused in place', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  await p.click('[data-act=done]');
+  await p.click('[data-tab=week]');
+  await p.click('summary[data-t=editRoles]');
+  await p.locator('#ed-roles input[type=text]').first().fill('Studying');
+  await p.click('summary[data-t=editTasks]');
+  await p.locator('[data-add=tasks]').click();
+  await p.click('#edit-save');
+  assert.match(await p.textContent('#edit-status'), /needs a title/);
+  await p.locator('#ed-tasks input[type=text]').last().fill('Added by hand');
+  await p.click('#edit-save');
+  await p.waitForFunction(() => document.getElementById('edit-bar').hidden);
+  const t = await local(p, 'meso-template');
+  const s = await local(p, 'meso-state');
+  assert.equal(t.roles[0].name, 'Studying');
+  assert.ok(t.tasks.some((x) => x.title === 'Added by hand'));
+  assert.equal(s.queue.filter((q) => q.status === 'done').length, 1);
+  await p.context().close();
+});
+
+await check('a new week closes the old one and keeps the debt', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  const t = await local(p, 'meso-template');
+  const s = await local(p, 'meso-state');
+  await p.context().close();
+  delete t.sample;
+  t.tasks[0].debt = true;
+  const q = await open({
+    time: '2026-11-09T08:00:00+07:00',
+    seed: { 'meso-template': JSON.stringify(t), 'meso-state': JSON.stringify(s), 'meso-mode': 'real', 'meso-consent': '2026-11-01' },
+  });
+  await q.waitForFunction(() => JSON.parse(localStorage.getItem('meso-template')).weekStart === '2026-11-09');
+  await q.waitForSelector('#see-review');
+  const m = await local(q, 'meso-template');
+  assert.equal(m.history.length, 4);
+  assert.deepEqual(m.done, {});
+  assert.equal(m.tasks[0].debt, true);
+  await q.click('#see-review');
+  await q.click('#review-skip');
+  assert.ok(await q.locator('#week-banner').isHidden());
+  await q.context().close();
+});
+
+await check('after midnight it is still the same day', async () => {
+  const p = await open({ time: '2026-11-04T00:30:00+07:00' });
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  const day = await p.evaluate(() => {
+    const d = new Date();
+    return d.getHours();
+  });
+  assert.equal(day, 0);
+  assert.equal((await local(p, 'meso-state')).date, '2026-11-03');
+  await p.context().close();
+});
+
+await check('offline: the app reloads and keeps planning, the AI says it needs a connection', async () => {
+  const p = await open({ sw: 'allow', time: new Date().toISOString() });
+  await p.evaluate(() => navigator.serviceWorker.ready);
+  await p.reload();
+  await p.waitForSelector('#now-card .now-title');
+  await p.context().setOffline(true);
+  await p.reload();
+  await p.waitForSelector('#now-card .now-title', { timeout: 8000 });
+  await p.waitForSelector('#offline-bar:not([hidden])');
+  const first = await p.textContent('.now-title');
+  await p.click('[data-act=done]');
+  await p.waitForFunction((f) => document.querySelector('.now-title').textContent !== f, first);
+  await p.fill('#say', 'test');
+  await p.click('#send');
+  await p.waitForFunction(() => /needs a connection/.test(document.getElementById('status').textContent));
+  await p.context().close();
+});
+
+if (AI) {
+  await check('AI: set up a week from a description, with goals', async () => {
+    const p = await open();
+    await p.click('#setup-open');
+    await p.fill('#setup-text', 'Student. Goal: GPA 3.6 this term. Study 15 hours a week, never under 8. Family 2 hours. Biology Monday 8 to 11. Up at 7, bed at 1am.');
+    await p.check('#setup-consent');
+    await p.click('#setup-go');
+    await p.waitForSelector('#setup', { state: 'hidden', timeout: 60000 });
+    const t = await local(p, 'meso-template');
+    assert.equal(t.sleep, '01:00');
+    assert.ok(t.goals.length >= 1);
+    assert.deepEqual(p.errors, []);
+    await p.context().close();
+  });
+
+  await check('AI: the broken afternoon ends in a proposal, and nothing is cut before approval', async () => {
+    const p = await open();
+    await p.click('#try');
+    await p.waitForSelector('[data-opt="0"]', { timeout: 40000 });
+    const s = await local(p, 'meso-state');
+    assert.equal(s.queue.filter((q) => q.status === 'cut').length, 0);
+    await p.click('[data-opt="0"]');
+    await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-state')).queue.some((q) => q.status === 'cut'));
+    await p.context().close();
+  });
+}
+
+await browser.close();
+console.log(`\n${checks - failures.length} of ${checks} passed`);
+process.exit(failures.length ? 1 : 0);
