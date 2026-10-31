@@ -48,6 +48,15 @@
     .warn { color: var(--warn); }
     .caption { border-left: 3px solid var(--accent); padding: 6px 10px; margin: 10px 0 0; background: var(--tip); border-radius: 0 8px 8px 0; font-size: 14px; }
     details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+    .tl { position: relative; margin-left: 44px; border-left: 1px solid var(--line); }
+    .tl .hr { position: absolute; left: -44px; width: 38px; text-align: right; font-size: 11px; color: var(--muted); transform: translateY(-50%); }
+    .tl .blk { position: absolute; left: 8px; right: 0; border-radius: 8px; padding: 3px 8px; font-size: 12px; line-height: 1.3; overflow: hidden;
+      background: var(--tip); border: 1px solid var(--accent); color: var(--fg); transition: top .6s ease, height .6s ease, opacity .4s; }
+    .tl .blk.fixed { background: repeating-linear-gradient(45deg, var(--chip), var(--chip) 6px, var(--card) 6px, var(--card) 12px); border-color: var(--line); color: var(--muted); }
+    .tl .blk.gone { opacity: 0; }
+    .tl .nowline { position: absolute; left: -4px; right: 0; border-top: 2px solid var(--bad); transition: top .6s ease; }
+    .tl .sleep { position: absolute; left: 8px; right: 0; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--muted); padding-top: 2px; }
+    @media (prefers-reduced-motion: reduce) { .tl .blk, .tl .nowline { transition: none; } }
     input[type=time], select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
   </style>
 </head>
@@ -77,6 +86,10 @@
     </section>
     <section class="card" id="now-card"></section>
     <section class="card" id="next-card"></section>
+    <details class="card" id="tl-card" open>
+      <summary data-t="timeline"></summary>
+      <div class="tl" id="tl" style="margin-top:12px"></div>
+    </details>
 
     <section class="card">
       <h2 data-t="changed"></h2>
@@ -145,7 +158,7 @@
         nowHint: 'The rest of the day slides automatically. Only classes, meetings and sleep have fixed times.',
         nothingElse: 'Nothing else today.', fixed: 'Fixed', doesNotFit: "Doesn't fit today",
         doesNotFitTail: 'Tell Mesocycle what changed and it will re-plan.',
-        changed: 'What changed?', replan: 'Re-plan', speak: '🎙 Speak', stop: '⏹ Stop', photo: '📷 Photo',
+        timeline: 'Today on a timeline', changed: 'What changed?', replan: 'Re-plan', speak: '🎙 Speak', stop: '⏹ Stop', photo: '📷 Photo',
         placeholder: "e.g. I slept through the afternoon, and there's a class meeting at 7pm for an hour",
         changedHint: 'Speak or type in English or Vietnamese. 📷 adds classes or tasks from a photo of a schedule.',
         listening: 'Listening... tap Stop when you finish.', transcribing: 'Turning your voice into text (Muse Voice Transcribe)...',
@@ -189,7 +202,7 @@
         nowHint: 'Phần còn lại tự trượt. Chỉ lớp học, lịch họp và giờ ngủ có giờ cố định.',
         nothingElse: 'Hôm nay không còn gì khác.', fixed: 'Cố định', doesNotFit: 'Không vừa hôm nay',
         doesNotFitTail: 'Nói cho Mesocycle biết điều gì thay đổi để nó xếp lại.',
-        changed: 'Có gì thay đổi?', replan: 'Xếp lại', speak: '🎙 Nói', stop: '⏹ Dừng', photo: '📷 Ảnh',
+        timeline: 'Dòng thời gian hôm nay', changed: 'Có gì thay đổi?', replan: 'Xếp lại', speak: '🎙 Nói', stop: '⏹ Dừng', photo: '📷 Ảnh',
         placeholder: 'Ví dụ: chiều nay tôi ngủ quên, 7 giờ tối có họp ban cán sự 1 tiếng',
         changedHint: 'Nói hoặc gõ tiếng Việt hay tiếng Anh. 📷 thêm lớp học hoặc việc từ ảnh lịch.',
         listening: 'Đang nghe... nói xong bấm Dừng.', transcribing: 'Đang chuyển giọng nói thành chữ (Muse Voice Transcribe)...',
@@ -298,6 +311,38 @@
         <div class="row" style="margin-top:8px"><button class="primary small" id="late-go">${t('lateReplan')}</button><button class="small" id="late-more">${t('lateStill')}</button></div></div>`;
     }
 
+    const PX = 0.75; // pixels per minute
+    function renderTimeline() {
+      const tl = $('tl');
+      const sleep = toMin(view.sleep);
+      const from = Math.max(0, Math.floor((state.now - 30) / 60) * 60);
+      const y = (m) => (m - from) * PX;
+      tl.style.height = `${y(sleep) + 20}px`;
+      tl.querySelectorAll('.hr').forEach((n) => n.remove());
+      for (let m = from; m <= sleep; m += 60) tl.insertAdjacentHTML('beforeend', `<div class="hr" style="top:${y(m)}px">${String(m / 60).padStart(2, '0')}:00</div>`);
+      const blocks = [
+        ...view.fixed.map((x, i) => ({ key: 'f' + i + x.title, title: x.title, start: toMin(x.start), end: toMin(x.end), fixed: true })),
+        ...view.queue.map((q) => ({ key: q.id, title: q.title, start: toMin(q.start), end: toMin(q.end) })),
+      ].filter((b) => b.end > from);
+      const seen = new Set();
+      for (const b of blocks) {
+        seen.add(b.key);
+        let el = tl.querySelector(`[data-k="${CSS.escape(b.key)}"]`);
+        if (!el) { el = document.createElement('div'); el.dataset.k = b.key; el.style.top = `${y(b.start)}px`; tl.appendChild(el); }
+        el.className = 'blk' + (b.fixed ? ' fixed' : '');
+        el.textContent = `${String(Math.floor(b.start / 60)).padStart(2, '0')}:${String(b.start % 60).padStart(2, '0')} ${b.title}`;
+        requestAnimationFrame(() => { el.style.top = `${y(Math.max(b.start, from))}px`; el.style.height = `${Math.max(16, (b.end - Math.max(b.start, from)) * PX - 2)}px`; });
+      }
+      tl.querySelectorAll('.blk').forEach((el) => { if (!seen.has(el.dataset.k)) { el.classList.add('gone'); setTimeout(() => el.remove(), 400); } });
+      let nl = tl.querySelector('.nowline');
+      if (!nl) { nl = document.createElement('div'); nl.className = 'nowline'; tl.appendChild(nl); }
+      nl.style.top = `${y(state.now)}px`;
+      let sl = tl.querySelector('.sleep');
+      if (!sl) { sl = document.createElement('div'); sl.className = 'sleep'; tl.appendChild(sl); }
+      sl.style.top = `${y(sleep)}px`;
+      sl.textContent = `${view.sleep} 🌙`;
+    }
+
     function render() {
       $('date').textContent = `${mode === 'real' ? t('today') : t('date')}, ${view.now}`;
       $('clock').value = view.now;
@@ -329,6 +374,7 @@
         <div class="next"><span>${esc(n.title)}</span><span class="muted">${n.start}</span></div>`).join('') || `<p class="muted" style="margin:0">${t('nothingElse')}</p>`}
         ${view.fixed.length ? `<p class="muted" style="margin:10px 0 0">${t('fixed')}: ${view.fixed.map((f) => `${esc(f.title)} ${f.start}`).join(', ')}</p>` : ''}${misfit}`;
 
+      renderTimeline();
       const debt = view.debtMinutes;
       $('week-card').innerHTML = `<h2>${t('week')}</h2>` + view.roles.filter((r) => r.floorMin).map((r) => {
         const have = r.weekSoFarMin + view.queue.filter((q) => q.role === r.id).reduce((s, q) => s + span(q), 0);
