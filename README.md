@@ -12,6 +12,16 @@ I'm a first-year IT student who also runs a small education company and trains p
 
 I built a planner with an automatic "reschedule" button before this hackathon, and I stopped using it. It needed setup, it guessed where to put missed work in a future that hadn't happened yet, and it treated every minute as equal. What actually worked was talking the plan through with an AI chat. Mesocycle is that conversation, with memory of my week and rules that can't be broken.
 
+## What you can do
+
+1. **Set up your week in about a minute.** Describe it in your own words (typed or spoken, English or Vietnamese), add a photo of your timetable if you have one. Muse Spark builds your roles, weekly minimums, fixed classes and work blocks through one checked tool call.
+2. **Follow one card: Now.** Done, need 15 more minutes, or can't do it. The rest of the day slides on an animated timeline.
+3. **Say what changed.** "I slept through the afternoon, meeting at 7pm." The agent re-plans and asks before cutting anything, with a default and an alternative.
+4. **It notices when you fall behind.** If the current block runs over, Mesocycle offers to re-plan before you have to ask.
+5. **See the week.** Today's debt is shown landing on the days that still have room, next to each role's weekly minimum.
+
+Or press **Try the demo** to replay the author's real broken Friday before midterms.
+
 ## How it works
 
 - **Only fixed events have hard times** (classes, exams, meetings, sleep). Flexible work is an ordered queue that slides when you're late, so a slip never cascades.
@@ -71,7 +81,7 @@ The checker itself was tested by planting bugs on purpose (sleep overrun, silent
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # put your keys in .dev.vars
-npm test                         # 25 tests, no model calls
+npm test                         # 30 tests, no model calls
 npm run simulate                 # the stress test
 npm run dev                      # open http://localhost:8787
 ```
