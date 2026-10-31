@@ -30,7 +30,14 @@ const MAX_FILE_CHARS = 14e6; // about 10 MB
 const SOFT_CAP = 1200; // about 10 USD a day of Meta credit; past it, the open model answers
 const HARD_CAP = 3000;
 const RATE_ERROR = { ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' };
+// Meta's geographic use policy: its models may not be offered in these places.
+// The planner itself runs in the browser and is not affected.
+const RESTRICTED = new Set(['AF', 'BY', 'KH', 'CN', 'HK', 'MO', 'CU', 'ER', 'ET', 'HT', 'IR', 'IQ', 'LY', 'MM', 'NI', 'KP', 'PK', 'RU', 'SO', 'SY', 'VE', 'EH']);
+const RESTRICTED_UA = new Set(['43', '40', '14', '09']); // Crimea, Sevastopol, Donetsk, Luhansk
+const restricted = ({ cf }) => RESTRICTED.has(cf?.country) || (cf?.country === 'UA' && RESTRICTED_UA.has(cf?.regionCode));
+
 async function aiGuard(request, env, url) {
+  if (restricted(request)) return { blocked: json({ ok: false, code: 'region', error: 'The AI is not available in your region.' }, 451) };
   const ip = request.headers.get('cf-connecting-ip') || 'local';
   // Per person, not per network: judges in one office share an IP. A loose
   // limit per IP remains, so a made-up visitor id does not buy much.

@@ -81,3 +81,16 @@ test('feedback keeps the rating only if valid, and quoting needs an explicit yes
   assert.equal(b.rating, null);
   assert.equal(b.quote, false);
 });
+
+test("Meta's restricted territories get no AI, everyone else does", async () => {
+  const from = (cf, path = '/api/setup') => {
+    const req = new Request(`http://x${path}`, { method: 'POST', body: '{}' });
+    Object.defineProperty(req, 'cf', { value: cf });
+    return worker.fetch(req, { FEEDBACK: fakeKv({}) }, {});
+  };
+  for (const country of ['HK', 'CN', 'RU', 'PK']) assert.equal((await from({ country })).status, 451, country);
+  assert.equal((await from({ country: 'UA', regionCode: '43' })).status, 451);
+  assert.equal((await from({ country: 'UA', regionCode: '30' })).status, 400); // reached the route
+  assert.equal((await from({ country: 'VN' })).status, 400);
+  assert.equal((await from({ country: 'US' })).status, 400);
+});
