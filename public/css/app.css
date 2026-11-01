@@ -157,3 +157,5 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .turn.ai { background: var(--tip); }
 .invite { text-align: center; padding: 28px 16px; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Nothing shows until the first draw, so the page does not jump into place. */
+body:not(.ready) main { visibility: hidden; }

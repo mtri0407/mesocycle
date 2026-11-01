@@ -1,16 +1,25 @@
-# Kịch bản video demo 3 phút (bản 4, chờ Trí duyệt)
+# Kịch bản video demo 3 phút (bản 5, chờ Trí duyệt)
 
 Lời thoại tiếng Anh (Trí đọc). Ghi chú quay tiếng Việt. Luật cuộc thi: phải chỉ rõ phần làm mới trong hackathon (câu ở 0:15 và 2:50). Không cần lộ mặt. Quay trên live.
 
+Bốn tiêu chí chấm chính thức, và đoạn nào ăn điểm tiêu chí nào:
+
+| Tiêu chí | Trọng số | Đoạn trong video |
+|---|---|---|
+| Impact: lợi ích thật, ai được lợi, có thành sản phẩm người ta dùng không, đúng chủ đề không | 30% | 0:00 tới 0:25 (vấn đề của chính mình, giải phóng đầu óc), 2:45 tới 3:00 (người dùng thật) |
+| Use of Meta AI Tooling: dùng sáng tạo, vượt mức tích hợp cơ bản, lộ ra khả năng bất ngờ | 25% | 0:25 tới 1:15 (gọi rảnh tay, hai tác tử chạy song song), 1:15 tới 1:35 (đọc PDF) |
+| Technical Depth & Execution: kỹ thuật chắc, trau chuốt | 20% | 1:55 tới 2:45 (biên lai, kiểm tra bằng code, 40 kịch bản, tấn công) |
+| Demo: chạy thật, ấn tượng, chất lượng video | 25% | Cả video, nhất là cảnh gọi quay một mạch không cắt |
+
 | Thời điểm | Hình | Lời thoại |
 |---|---|---|
-| 0:00 tới 0:15 | Chữ trên nền: "First-year IT student. Runs an education company. Midterms next week." | "Every day I make a plan, and every day something breaks it. One late start, and the whole day collapses. Other AI calendars optimize your work. I wanted one that protects what must not be sacrificed." |
+| 0:00 tới 0:15 | Chữ trên nền: "First-year IT student. Runs an education company. Midterms next week." | "Every day I make a plan, and every day something breaks it. Then I spend the next hour re-planning in my head, and it's my sleep and my family that lose. Other AI calendars optimize your work. I wanted one that takes that job off my mind, and protects what must not be sacrificed." |
 | 0:15 tới 0:25 | Màn đầu của app | "So during this hackathon I built Mesocycle from scratch, on Meta's Muse models." |
 | 0:25 tới 1:15 | **Cuộc gọi, quay một mạch, không cắt.** Điện thoại trong tay. Bấm Call AI: "I slept through the afternoon, and there's a class meeting at 7pm." Dòng thời gian trượt. Hai thẻ hiện ra. Nói "option 2". | Để tiếng thật của cuộc gọi. Sau đó nói: "That was not sped up. The meeting landed in two seconds. Then two advisors weighed it at the same time: one defends my exams, one defends my life. Nothing moved until I chose, and I chose out loud." |
 | 1:15 tới 1:35 | Tab Goals, bấm Try a sample syllabus, danh sách hiện ra, tích, Add. Dải cảnh báo nếu có hạn thiếu giờ | "I drop in a syllabus. Muse Spark finds every date, I approve what stays, and the radar works out, in code, which deadline is in trouble." |
 | 1:35 tới 1:55 | Tab Week: biểu đồ, Review this week, Plan next week, bảng giờ cũ và mới kèm lý do | "Each week closes itself. Muse Spark proposes next week from what really happened, and code rejects anything that drops a weekly minimum or overfills the week." |
 | 1:55 tới 2:20 | Biên lai dưới câu trả lời, huy hiệu 8 of 8, bấm Undo. Tắt mạng, bấm Done vẫn chạy | "The model never edits my plan. It calls tools, and code checks every call. Every answer comes with a receipt written by code, and I can undo anything. Planning runs on my phone, so it keeps working with no connection." |
-| 2:20 tới 2:45 | Sơ đồ kiến trúc, rồi bảng 40/40 trong README, dòng 10 attacks | "I tested it on forty real scenarios, ten of them attacks: fake system messages, instructions hidden in a photo. Zero rules broken, on Muse Spark and on open-weight Muse Spark Open, which also takes over if Meta goes down." |
+| 2:20 tới 2:45 | Sơ đồ kiến trúc, rồi bảng kết quả trong README, dòng 10 attacks | "I tested it on forty real scenarios, ten of them attacks: fake system messages, instructions hidden in a photo. Zero rules broken, on Muse Spark and on open-weight Muse Spark Open, which also takes over if Meta goes down." |
 | 2:45 tới 3:00 | Số người dùng thật và một câu trích dẫn được phép (nếu có). Link | "[Số thật từ usage-report]. Mesocycle protects your deadlines and your life, not the clock. Everything here was built during the hackathon; the history starts October 27." |
 
 ## Clip 30 giây cho X (dọc, có phụ đề)

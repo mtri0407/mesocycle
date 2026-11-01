@@ -12,7 +12,7 @@ const browser = await chromium.launch();
 const failures = [];
 let checks = 0;
 
-async function open({ time = '2026-11-03T10:00:00+07:00', viewport = { width: 390, height: 844 }, sw = 'block', seed = null } = {}) {
+async function open({ time = '2026-11-03T10:00:00+07:00', viewport = { width: 390, height: 844 }, sw = 'block', seed = null, before = null } = {}) {
   const ctx = await browser.newContext({ viewport, locale: 'en-US', timezoneId: 'Asia/Ho_Chi_Minh', serviceWorkers: sw });
   if (seed) await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); } }, seed);
   const page = await ctx.newPage();
@@ -21,6 +21,9 @@ async function open({ time = '2026-11-03T10:00:00+07:00', viewport = { width: 39
   page.errors = [];
   page.on('request', (r) => { if (new URL(r.url()).pathname.startsWith('/api/')) page.apiCalls.push(new URL(r.url()).pathname); });
   page.on('pageerror', (e) => page.errors.push(e.message));
+  // A real week says good morning through the AI; these checks never call a model.
+  await page.route('**/api/checkin', (r) => r.fulfill({ json: { ok: true, text: '' } }));
+  if (before) await before(page);
   await page.goto(BASE);
   await page.waitForSelector('#now-card .now-title');
   return page;
@@ -36,6 +39,22 @@ async function check(name, fn) {
     console.log(`FAIL  ${name}\n      ${String(e.message).split('\n')[0].slice(0, 160)}`);
   }
 }
+const SID = 'a'.repeat(64);
+const CONSENT = { 'meso-consent': '2026-11-01' };
+// A real week, not labelled as a sample, as saved by a person.
+async function realWeek() {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  const t = await local(p, 'meso-template');
+  const s = await local(p, 'meso-state');
+  await p.context().close();
+  delete t.sample;
+  return { t, s, seed: { 'meso-template': JSON.stringify(t), 'meso-state': JSON.stringify(s), 'meso-mode': 'real', ...CONSENT } };
+}
+// One finished turn of the agent, as the Worker streams it.
+const agentDone = (over = {}) => JSON.stringify({ type: 'done', ok: true, reply: 'ok', trace: [], ...over }) + '\n';
+const answer = (r, over) => r.fulfill({ status: 200, contentType: 'application/x-ndjson', body: agentDone(over) }).catch(() => {});
 const overflow = (p) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const local = (p, key) => p.evaluate((k) => JSON.parse(localStorage.getItem(k)), key);
 
@@ -208,8 +227,8 @@ await check('finishing everything offers one more block from the backlog', async
   await p.context().close();
 });
 
-await check('resetting the demo clears the old conversation and proposal', async () => {
-  const p = await open();
+await check('resetting the demo clears the conversation and the proposal, and the agent hears none of it', async () => {
+  const p = await open({ seed: CONSENT });
   await p.route('**/api/agent', (r) => r.abort());
   await p.click('#try');
   await p.waitForSelector('[data-opt="0"]', { timeout: 20000 });
@@ -217,17 +236,203 @@ await check('resetting the demo clears the old conversation and proposal', async
   await p.click('#reset');
   await p.waitForFunction(() => !document.querySelector('[data-opt="0"]'));
   assert.equal(await p.textContent('#answer'), '');
+  await p.unroute('**/api/agent');
+  let sent = null;
+  await p.route('**/api/agent', (r) => { sent = r.request().postDataJSON(); return answer(r, { state: sent.state }); });
+  await p.fill('#say', 'hello again');
+  await p.click('#send');
+  await p.waitForFunction(() => document.querySelector('#answer .reply'));
+  assert.deepEqual([sent.history, sent.pending], [[], null]);
+  assert.equal(await p.locator('#undo').count(), 0);
   await p.context().close();
 });
 
-await check('opening offline keeps you signed in', async () => {
-  const p = await open({ sw: 'block', seed: { 'meso-sid': 'a'.repeat(64) } });
-  await p.route('**/api/data', (r) => r.abort());
-  await p.evaluate((sid) => localStorage.setItem('meso-sid', sid), 'a'.repeat(64));
-  await p.reload();
-  await p.waitForSelector('#now-card .now-title');
-  await p.waitForTimeout(500);
-  assert.equal(await p.evaluate(() => localStorage.getItem('meso-sid')), 'a'.repeat(64));
+await check('an AI answer that arrives after a reset is dropped', async () => {
+  const p = await open({ seed: CONSENT });
+  const s = await local(p, 'meso-state');
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await p.route('**/api/agent', async (r) => { await held; await answer(r, { reply: 'LATE', state: { ...s, now: 1200 } }); });
+  await p.fill('#say', 'hello');
+  await p.click('#send');
+  await p.waitForFunction(() => document.getElementById('send').disabled);
+  await p.click('#demo-box summary');
+  await p.click('#reset');
+  await p.waitForFunction(() => !document.getElementById('send').disabled);
+  release();
+  await p.waitForTimeout(300);
+  assert.equal(await p.textContent('#answer'), '');
+  assert.notEqual((await local(p, 'meso-state')).now, 1200);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('offline keeps the session, and only the server can end it', async () => {
+  const p = await open({ seed: { 'meso-sid': SID }, before: (pg) => pg.route('**/api/data', (r) => r.abort()) });
+  await p.waitForSelector('#logout:not([hidden])');
+  assert.match(await p.textContent('#account-text'), /back online/);
+  assert.equal(await p.evaluate(() => localStorage.getItem('meso-sid')), SID);
+  await p.unroute('**/api/data');
+  await p.evaluate(() => dispatchEvent(new Event('online'))); // the real server answers 401 to a made-up session
+  await p.waitForFunction(() => !localStorage.getItem('meso-sid'));
+  assert.ok(await p.locator('#logout').isHidden());
+  await p.context().close();
+});
+
+await check('a device that cannot read the saved plan writes nothing over it, and reads first when back', async () => {
+  const { seed } = await realWeek();
+  const calls = [];
+  const p = await open({
+    seed: { ...seed, 'meso-sid': SID },
+    before: (pg) => pg.route('**/api/data', (r) => { calls.push(r.request().method()); return r.abort(); }),
+  });
+  await p.click('[data-act=done]');
+  await p.waitForTimeout(2200);
+  assert.deepEqual(calls, ['GET']);
+  assert.ok(await p.locator('#save-note').isVisible());
+  await p.unroute('**/api/data');
+  await p.route('**/api/data', (r) => {
+    calls.push(r.request().method());
+    return r.fulfill({ json: r.request().method() === 'GET' ? { ok: true, user: { name: 'A', email: 'a@b.c' }, data: null } : { ok: true } });
+  });
+  await p.evaluate(() => dispatchEvent(new Event('online')));
+  await p.waitForFunction(() => document.getElementById('save-note').hidden);
+  await p.waitForTimeout(1800);
+  assert.deepEqual(calls, ['GET', 'GET', 'POST']);
+  await p.context().close();
+});
+
+await check('opening a saved plan writes nothing back', async () => {
+  const { t, s, seed } = await realWeek();
+  const saved = { ...t, checkinDate: s.date }; // the morning check-in is a change, once a day
+  const posts = [];
+  const p = await open({
+    seed: { ...seed, 'meso-sid': SID, 'meso-template': JSON.stringify(saved) },
+    before: (pg) => pg.route('**/api/data', (r) => {
+      if (r.request().method() === 'POST') posts.push(1);
+      return r.fulfill({ json: { ok: true, user: { name: 'A', email: 'a@b.c' }, data: { template: saved, state: s, stats: null } } });
+    }),
+  });
+  await p.waitForSelector('#logout:not([hidden])');
+  await p.waitForTimeout(2200);
+  assert.equal(posts.length, 0);
+  await p.context().close();
+});
+
+await check('a new day is not an edit, so a newer copy from another device still wins', async () => {
+  const { t, s, seed } = await realWeek();
+  const phone = { ...t, updatedAt: 5000, roles: t.roles.map((r, i) => (i ? r : { ...r, name: 'From the phone' })) };
+  const p = await open({
+    time: '2026-11-05T08:00:00+07:00',
+    seed: { ...seed, 'meso-sid': SID, 'meso-template': JSON.stringify({ ...t, updatedAt: 1000 }) },
+    before: (pg) => pg.route('**/api/data', (r) => r.fulfill({ json: { ok: true, user: { name: 'A', email: 'a@b.c' }, data: { template: phone, state: s, stats: null } } })),
+  });
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-template')).roles[0].name === 'From the phone');
+  assert.equal((await local(p, 'meso-state')).date, '2026-11-05');
+  await p.context().close();
+});
+
+await check('finishing early on a real day starts the next block now', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ seed });
+  const now = (await local(p, 'meso-state')).now;
+  assert.equal(now, 600);
+  await p.click('[data-act=done]');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-state')).queue.some((q) => q.status === 'done'));
+  assert.equal((await local(p, 'meso-state')).now, now);
+  await p.context().close();
+});
+
+await check('finished work counts at once on the goals', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  const before = await p.textContent('#goals-card');
+  await p.click('[data-act=done]');
+  await p.waitForFunction((b) => document.getElementById('goals-card').textContent !== b, before);
+  await p.context().close();
+});
+
+await check('after midnight the agent is told yesterday\'s weekday, like the date', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ time: '2026-11-04T00:30:00+07:00', seed });
+  let sent = null;
+  await p.route('**/api/agent', (r) => { sent = r.request().postDataJSON(); return answer(r, { state: sent.state }); });
+  await p.fill('#say', 'hello');
+  await p.click('#send');
+  await p.waitForFunction(() => document.querySelector('#answer .reply'));
+  assert.equal(sent.weekday, 2); // Tuesday, though the calendar says Wednesday
+  await p.context().close();
+});
+
+await check('leaving the sample leaves nothing of it behind, and the demo has a way back to your week', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ seed });
+  await p.click('#to-demo');
+  await p.waitForSelector('#to-week');
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  await p.route('**/api/agent', (r) => { const { state } = r.request().postDataJSON(); return answer(r, { state: { ...state, fixed: [...state.fixed, { id: 'fix-9', title: 'Meeting', start: 700, end: 760 }] } }); });
+  await p.fill('#say', 'meeting');
+  await p.click('#send');
+  await p.waitForSelector('#undo');
+  await p.click('#sample-exit');
+  await p.waitForFunction(() => !JSON.parse(localStorage.getItem('meso-template')).sample);
+  assert.equal(await p.locator('#undo').count(), 0);
+  await p.click('#to-demo');
+  await p.waitForSelector('#to-week');
+  await p.click('#to-week');
+  await p.waitForSelector('#real-row:not([hidden])');
+  assert.equal(await p.evaluate(() => localStorage.getItem('meso-mode')), 'real');
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('a saved day this version cannot read never leaves a blank screen', async () => {
+  const demo = await open({ seed: { 'meso-state': '{"nonsense":true}' } });
+  assert.ok(await demo.locator('[data-act=done]').isVisible());
+  await demo.context().close();
+  const { seed } = await realWeek();
+  const real = await open({ seed: { ...seed, 'meso-state': '{"nonsense":true}' } });
+  assert.ok(await real.locator('[data-act=done]').isVisible());
+  await real.context().close();
+});
+
+await check('a connection that hangs does not hold the first screen', async () => {
+  const p = await open({ before: (pg) => pg.route('**/api/config', () => {}) });
+  assert.ok(await p.locator('[data-act=done]').isVisible());
+  await p.context().close();
+});
+
+await check('Enter sends, Shift+Enter starts a new line', async () => {
+  const p = await open({ seed: CONSENT });
+  let calls = 0;
+  await p.route('**/api/agent', (r) => { calls++; return answer(r, { state: r.request().postDataJSON().state }); });
+  await p.fill('#say', 'line one');
+  await p.press('#say', 'Shift+Enter');
+  assert.equal(calls, 0);
+  await p.press('#say', 'Enter');
+  await p.waitForFunction(() => document.querySelector('#answer .reply'));
+  assert.equal(calls, 1);
+  await p.context().close();
+});
+
+await check('a cleared demo clock changes nothing', async () => {
+  const p = await open();
+  await p.click('#demo-box summary');
+  await p.fill('#clock', '');
+  await p.dispatchEvent('#clock', 'change');
+  assert.equal((await local(p, 'meso-state')).now, 420);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('when the AI stops answering, the guided demo does not wait for ever', async () => {
+  const p = await open();
+  await p.route('**/api/agent', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, code: 'ai', error: 'x' }) }));
+  await p.click('#try');
+  await p.waitForSelector('[data-opt="0"]', { timeout: 20000 });
+  assert.match(await p.textContent('#status'), /recording/i);
   await p.context().close();
 });
 

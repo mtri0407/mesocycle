@@ -3,18 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mesocycle</title>
-  <meta name="description" content="A planning agent that re-plans your day when life breaks the plan.">
+  <title>Mesocycle: your day broke, say what happened</title>
+  <meta name="description" content="Call an AI and say what happened. It re-plans your day in seconds, protects your sleep, your people and your health, and never cuts anything without asking. Built on Meta's Muse models.">
   <meta name="theme-color" content="#2457d6">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mesocycle">
+  <meta property="og:title" content="Your day broke. Say what happened.">
+  <meta property="og:description" content="Call an AI that re-plans your day in seconds and protects what must not be sacrificed: your sleep, your people, your health.">
+  <meta property="og:url" content="https://mesocycle.minhtriphamnguyen69.workers.dev/">
+  <meta property="og:image" content="https://mesocycle.minhtriphamnguyen69.workers.dev/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Mesocycle on a phone: two AI advisors weigh a broken evening, one for deadlines, one for your life.">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link id="font" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="modulepreload" href="/js/app.js">
+  <link rel="modulepreload" href="/js/strings.js">
+  <link rel="modulepreload" href="/js/audio.js">
+  <link rel="modulepreload" href="/core/handlers.js">
+  <link rel="modulepreload" href="/core/planner.js">
+  <link rel="modulepreload" href="/core/invariants.js">
+  <link rel="modulepreload" href="/core/tools.js">
+  <link rel="modulepreload" href="/core/setup.js">
+  <link rel="modulepreload" href="/core/radar.js">
+  <link rel="modulepreload" href="/core/week-tools.js">
+  <link rel="modulepreload" href="/core/diff.js">
+  <link rel="modulepreload" href="/core/ics.js">
+  <link rel="modulepreload" href="/core/sample.js">
+  <link rel="modulepreload" href="/core/demo-state.js">
 </head>
 <body>
+  <noscript><p style="padding:16px">Mesocycle needs JavaScript. Planning runs on your device.</p></noscript>
   <header class="top">
     <p class="brand">Mesocycle</p>
     <nav id="tabs" role="tablist">

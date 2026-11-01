@@ -21,12 +21,22 @@ function json(data, status = 200) {
 }
 
 const AGENT_EFFORT = 'low'; // docs/BENCHMARK.md: the lowest level that kept the score
+const AGENT_TIMEOUT = 15_000; // for one model call; a whole turn is under 8 seconds 90% of the time
+const PHOTO_TIMEOUT = 30_000;
+
+// Provider details belong in the log. The person gets a sentence they can act on.
+const aiError = (err) => {
+  console.error(String(err.message || err));
+  return { ok: false, code: 'ai', error: 'The AI is not answering right now. Try again in a minute.' };
+};
+const fromProvider = (err) => 'canSwitch' in err || 'status' in err;
 
 // Guard for routes that call a model or write to KV: a limit per visitor and
 // per network (Cloudflare rate limit bindings), and a daily ceiling (KV).
 const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/import', '/api/model-check', '/api/feedback', '/api/reminders'];
 const MAX_IMAGE_CHARS = 8e6;
 const MAX_FILE_CHARS = 14e6; // about 10 MB
+const MAX_PLAN_CHARS = 300_000; // the same ceiling as a saved plan: a real plan always fits
 const SOFT_CAP = 1200; // about 10 USD a day of Meta credit; past it, the open model answers
 const HARD_CAP = 3000;
 const RATE_ERROR = { ok: false, code: 'rate', error: 'Too many requests. Wait a minute and try again.' };
@@ -57,6 +67,30 @@ async function aiGuard(request, env, url) {
     } catch { /* see above */ }
   }
   return {};
+}
+
+// One tool call the model must make, judged by code. A refused call goes back
+// with the reasons, at most 3 tries. check(args) -> { errors } or the result.
+async function checkedCall(env, { messages, tool, preferred, check, failure }) {
+  const steps = [];
+  const name = tool.function.name;
+  let modelMs = 0;
+  for (let i = 0; i < 3; i++) {
+    const out = await chatSafe(env, { messages, tools: [tool], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, preferred);
+    modelMs += out.ms;
+    const call = out.toolCalls.find((c) => c.name === name);
+    if (!call) {
+      messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: `Call ${name} now.` });
+      steps.push({ ok: false, error: `no ${name} call` });
+      continue;
+    }
+    const v = check(call.args);
+    steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
+    if (!v.errors) return { value: v, steps, modelMs };
+    messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
+    messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.errors }) });
+  }
+  return { failed: json({ ok: false, error: failure, steps, modelMs }, 422) };
 }
 
 // One real model call per provider, at most every 10 minutes. The monitor in
@@ -101,6 +135,7 @@ export default {
       const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
       if (request.method === 'POST' && !body) return json({ ok: false, error: 'Body must be JSON' }, 400);
       if (body?.image?.length > MAX_IMAGE_CHARS) return json({ ok: false, error: 'Image too large' }, 413);
+      if (AI_ROUTES.includes(url.pathname) && JSON.stringify([body?.state, body?.template, body?.previous]).length > MAX_PLAN_CHARS) return json({ ok: false, error: 'Plan too large' }, 413);
       // Private mode, or past today's budget: the open model answers.
       const preferred = overBudget || body?.provider === 'open' ? 'open' : 'meta';
 
@@ -125,9 +160,9 @@ export default {
       if (url.pathname === '/api/agent' && body) {
         const provider = preferred;
         if (body.image && !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(body.image)) return json({ ok: false, error: 'Image must be a JPEG, PNG, WebP or GIF data URL' }, 400);
-        let modelMs = 0, usedProvider = provider, fellBack = false;
+        let modelMs = 0, usedProvider = provider, fellBack = false, onSwitch = () => {};
         const chatFn = async (messages, tools) => {
-          const out = await chatSafe(env, { messages, tools, maxTokens: 4000, effort: AGENT_EFFORT }, provider);
+          const out = await chatSafe(env, { messages, tools, maxTokens: 4000, effort: AGENT_EFFORT, timeoutMs: body.image ? PHOTO_TIMEOUT : AGENT_TIMEOUT, onSwitch: () => onSwitch() }, provider);
           modelMs += out.ms;
           usedProvider = out.provider;
           fellBack = fellBack || !!out.fellBack;
@@ -143,7 +178,7 @@ export default {
           progress({ type: 'council', stage: 'start' });
           return runCouncil({ candidates: tradeoffCandidates(state), deadlines: view(state).deadlines, lang: body.lang, ask, onPick: ({ by, why }) => progress({ type: 'council', stage: 'pick', by, why }) });
         };
-        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call, councilFn: councilFor(() => {}) };
+        const args = { state: body.state, userText: String(body.text || '').slice(0, 2000), chatFn, image: body.image || null, history, template: body.template || null, pending: body.pending || null, weekday: body.weekday ?? 0, call: !!body.call, councilFn: councilFor(() => {}), lang: body.lang };
         if (!body.stream) {
           const out = await runAgent(args);
           return json({ ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
@@ -152,12 +187,13 @@ export default {
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
         const send = (obj) => writer.write(new TextEncoder().encode(JSON.stringify(obj) + '\n'));
+        onSwitch = () => send({ type: 'switch' });
         ctx.waitUntil((async () => {
           try {
             const out = await runAgent({ ...args, councilFn: councilFor(send), onStep: (step) => send({ type: 'step', ...step, view: view(step.state) }) });
             await send({ type: 'done', ok: true, ...out, modelMs, provider: usedProvider, fellBack, view: view(out.state) });
           } catch (err) {
-            await send({ type: 'done', ok: false, error: String(err.message || err) });
+            await send({ type: 'done', ...(fromProvider(err) ? aiError(err) : { ok: false, error: String(err.message || err) }) });
           }
           await writer.close();
         })());
@@ -169,12 +205,14 @@ export default {
         if (String(body.file).length > MAX_FILE_CHARS) return json({ ok: false, error: 'File too large' }, 413);
         const part = documentPart(String(body.file), body.name);
         if (!part) return json({ ok: false, error: 'Send a PDF or an image' }, 400);
-        // Only Meta's API reads PDFs, so private mode cannot send one anywhere.
+        // Only Meta's API reads PDFs, so private mode cannot send one anywhere,
+        // and a PDF has no second provider to fall back on.
         if (part.type === 'file' && preferred === 'open') return json({ ok: false, code: 'private-pdf', error: 'PDF needs Muse Spark' }, 400);
-        const out = await chatSafe(env, {
+        const opts = {
           messages: [{ role: 'user', content: [{ type: 'text', text: importPrompt(String(body.date)) }, part] }],
           maxTokens: 6000, effort: 'low', format: IMPORT_FORMAT, timeoutMs: 45_000,
-        }, part.type === 'file' ? 'meta' : preferred);
+        };
+        const out = await (part.type === 'file' ? chat(env, opts, 'meta') : chatSafe(env, opts, preferred));
         return json({ ok: true, ...readImport(out.text, String(body.date)) });
       }
 
@@ -187,31 +225,18 @@ export default {
         return json({ ok: true, text: noDashes(out.text.trim()) });
       }
 
-      // Set up my week: one description (and maybe a timetable photo) in,
-      // a checked weekly template and today's plan out. Invalid arguments go
-      // back to the model with the reasons, at most 3 tries.
       // Plan next week from how the last one went. This only proposes: the
       // browser shows old and new hours, and nothing applies until approved.
       if (url.pathname === '/api/setup' && body?.previous) {
         const t = body.previous;
         const review = body.review || weekReview(t);
         const messages = [{ role: 'system', content: NEXT_WEEK_PROMPT }, { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\nLast week:\n${nextWeekBrief(t, review)}\n\n${String(body.text || '').slice(0, 2000)}` }];
-        const steps = [];
-        let modelMs = 0;
-        for (let i = 0; i < 3; i++) {
-          const out = await chatSafe(env, { messages, tools: [PLAN_NEXT_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, preferred);
-          modelMs += out.ms;
-          const call = out.toolCalls.find((c) => c.name === 'plan_next_week');
-          if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call plan_next_week now.' }); steps.push({ ok: false, error: 'no plan_next_week call' }); continue; }
-          const v = validateNext(t, call.args);
-          steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
-          if (!v.errors) return json({ ok: true, next: v.next, steps, modelMs });
-          messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
-          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.errors }) });
-        }
-        return json({ ok: false, error: 'Could not plan next week, try again.', steps, modelMs }, 422);
+        const { failed, value, steps, modelMs } = await checkedCall(env, { messages, tool: PLAN_NEXT_WEEK, preferred, check: (args) => validateNext(t, args), failure: 'Could not plan next week, try again.' });
+        return failed || json({ ok: true, next: value.next, steps, modelMs });
       }
 
+      // Set up my week: one description (and maybe a timetable photo) in, a
+      // checked weekly template and today's plan out.
       if (url.pathname === '/api/setup' && body) {
         const text = String(body.text || '').trim().slice(0, 4000);
         if (!text && !body.image) return json({ ok: false, error: 'Describe your week first' }, 400);
@@ -221,24 +246,11 @@ export default {
           ? { role: 'user', content: [{ type: 'text', text: intro }, { type: 'image_url', image_url: { url: body.image } }] }
           : { role: 'user', content: intro };
         const messages = [{ role: 'system', content: SETUP_PROMPT }, user];
-        const steps = [];
-        let modelMs = 0;
-        for (let i = 0; i < 3; i++) {
-          const out = await chatSafe(env, { messages, tools: [BUILD_WEEK], maxTokens: 6000, effort: 'low', timeoutMs: 45_000 }, preferred);
-          modelMs += out.ms;
-          const call = out.toolCalls.find((c) => c.name === 'build_week');
-          if (!call) { messages.push({ role: 'assistant', content: out.text || '' }, { role: 'user', content: 'Call build_week now.' }); steps.push({ ok: false, error: 'no build_week call' }); continue; }
-          const v = validateWeek(call.args);
-          steps.push({ ok: !v.errors, error: v.errors?.join(' ') });
-          if (!v.errors) {
-            v.template.weekStart = mondayOf(body.date);
-            const state = buildDay(v.template, { date: body.date, weekday: body.weekday, now: body.now });
-            return json({ ok: true, template: v.template, state, view: view(state), steps, modelMs });
-          }
-          messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
-          messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.errors }) });
-        }
-        return json({ ok: false, error: 'Could not build a valid week, try describing it again.', steps, modelMs }, 422);
+        const { failed, value, steps, modelMs } = await checkedCall(env, { messages, tool: BUILD_WEEK, preferred, check: validateWeek, failure: 'Could not build a valid week, try describing it again.' });
+        if (failed) return failed;
+        const template = { ...value.template, weekStart: mondayOf(body.date) };
+        const state = buildDay(template, { date: body.date, weekday: body.weekday, now: body.now });
+        return json({ ok: true, template, state, view: view(state), steps, modelMs });
       }
 
       // Reminders: a push address and today's times, never task names.
@@ -292,6 +304,7 @@ export default {
 
       return json({ ok: false, error: 'Not found' }, 404);
     } catch (err) {
+      if (fromProvider(err)) return json(aiError(err), 503);
       return json({ ok: false, error: String(err.message || err) }, 500);
     }
   },

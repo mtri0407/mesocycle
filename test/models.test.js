@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickProvider, buildChatRequest, readChatResponse, chatSafe } from '../src/models.js';
+import { pickProvider, buildChatRequest, readChatResponse, chatSafe, wakeMeta } from '../src/models.js';
 
 test('pickProvider defaults to Meta and reads the right key', () => {
   const p = pickProvider({ MODEL_API_KEY: 'k1' });
@@ -61,27 +61,67 @@ const ok = () => new Response(JSON.stringify({ choices: [{ message: { content: '
 const env = { MODEL_API_KEY: 'a', BASETEN_API_KEY: 'b' };
 
 test('when Meta fails, Muse Spark Open takes over', async () => {
-  for (const status of [404, 429, 503]) {
+  for (const status of [401, 402, 403, 404, 429, 503]) {
+    wakeMeta();
     const hosts = [];
     const out = await withFetch(async (url) => {
       hosts.push(new URL(url).hostname);
       return hosts.length === 1 ? new Response('no', { status }) : ok();
     }, () => chatSafe(env, { messages: [] }, 'meta'));
-    assert.deepEqual(hosts, ['api.meta.ai', 'inference.baseten.co']);
+    assert.deepEqual(hosts, ['api.meta.ai', 'inference.baseten.co'], `HTTP ${status}`);
     assert.equal(out.fellBack, true);
   }
+  wakeMeta();
   const out = await withFetch(async (url) => {
     if (new URL(url).hostname === 'api.meta.ai') throw new Error('network');
     return ok();
   }, () => chatSafe(env, { messages: [] }));
   assert.equal(out.provider, 'open');
+  wakeMeta();
+});
+
+test('an answer that cannot be read counts as a failure, so the other model is tried', async () => {
+  wakeMeta();
+  const hosts = [];
+  const out = await withFetch(async (url) => {
+    hosts.push(new URL(url).hostname);
+    return hosts.length === 1 ? new Response('<html>busy</html>') : ok();
+  }, () => chatSafe(env, { messages: [] }));
+  assert.equal(out.provider, 'open');
+  assert.equal(out.fellBack, true);
+  wakeMeta();
+});
+
+test('after Meta fails it rests, so the next calls of a turn do not wait for it again', async () => {
+  wakeMeta();
+  const hosts = [];
+  const fake = async (url) => {
+    hosts.push(new URL(url).hostname);
+    return new URL(url).hostname === 'api.meta.ai' ? new Response('down', { status: 503 }) : ok();
+  };
+  await withFetch(fake, () => chatSafe(env, { messages: [] }));
+  const second = await withFetch(fake, () => chatSafe(env, { messages: [] }));
+  assert.deepEqual(hosts, ['api.meta.ai', 'inference.baseten.co', 'inference.baseten.co']);
+  assert.equal(second.fellBack, true);
+  wakeMeta();
 });
 
 test('our own mistakes do not switch, and a choice of the open model is kept', async () => {
+  wakeMeta();
   let calls = 0;
   await assert.rejects(withFetch(async () => { calls++; return new Response('bad', { status: 400 }); }, () => chatSafe(env, { messages: [] }, 'meta')));
   assert.equal(calls, 1);
   calls = 0;
   await assert.rejects(withFetch(async () => { calls++; return new Response('down', { status: 503 }); }, () => chatSafe(env, { messages: [] }, 'open')));
   assert.equal(calls, 1);
+});
+
+test('a person on the open model is never sent to Meta, even while Meta rests', async () => {
+  wakeMeta();
+  await withFetch(async (url) => (new URL(url).hostname === 'api.meta.ai' ? new Response('down', { status: 503 }) : ok()), () => chatSafe(env, { messages: [] }));
+  const hosts = [];
+  const out = await withFetch(async (url) => { hosts.push(new URL(url).hostname); return ok(); }, () => chatSafe(env, { messages: [] }, 'open'));
+  assert.deepEqual(hosts, ['inference.baseten.co']);
+  assert.equal(out.fellBack, undefined);
+  wakeMeta();
 });

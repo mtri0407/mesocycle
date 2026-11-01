@@ -19,21 +19,22 @@ You call it and say what happened. "I slept through the afternoon, and there's a
 
 **Who it's for / Build for Your World**
 
-I'm a first-year IT student running a small education company, and I built this for my own exam weeks. It is for anyone whose week has more roles than hours: students who work, parents who study, founders who still want a life. Other AI calendars optimize work. This one protects what must not be sacrificed.
+I'm a first-year IT student running a small education company, and I built this for my own exam weeks. Every broken day used to cost me a second hour, spent re-planning in my head, and it was always my sleep and my family that lost. Mesocycle frees up that time and that mental space: say it once, and the rest of the day is worked out, with the hard choice shown only when there is one. It is for anyone whose week has more roles than hours: students who work, parents who study, founders who still want a life. Other AI calendars optimize work. This one protects what must not be sacrificed.
 
 **How we used Meta AI**
 
-- Muse Spark 1.3 runs a tool-calling agent with 10 checked tools, parallel calls, tuned reasoning effort and prompt caching.
-- Two Muse Spark advisors run in parallel with strict structured output and no tools, choosing only among cuts code has verified.
-- Muse Voice Transcribe powers a hands-free call: realtime WebSocket through the Worker, endpointing to hear when a turn ends, language bias for Vietnamese and English, and keywords taken from the person's own plan.
+- Muse Spark 1.3 runs a tool-calling agent with 10 checked tools. Parallel tool calls stream to the screen as they pass the checks, so the plan moves while the model is still working.
+- Two Muse Spark advisors start as soon as code sees the day no longer fits, in parallel with the agent, with strict structured output and no tools. They choose only among cuts code has verified.
+- Muse Voice Transcribe powers a hands-free call with no speech output model: realtime WebSocket through the Worker, endpointing to hear when a turn ends, silence streamed while the device talks, language bias for Vietnamese and English, and keywords taken from the person's own plan, so their own names are heard correctly.
 - Muse Spark reads timetables, messages and PDF syllabi into strict JSON that the person approves.
-- Muse Spark Open on Baseten runs the same agent as a private mode and takes over automatically if Meta fails. It passes the same 40 scenarios.
+- Reasoning effort is tuned per job from measurements: a typical turn went from 9.9 seconds to about 3, and the benchmark score rose from 18/20 to 20/20.
+- Muse Spark Open on Baseten runs the same agent as a private mode and takes over within the turn if Meta fails, stalls or runs out of credit. It holds every rule across the same 40 scenarios.
 
 **Technical depth**
 
 The model never edits the plan. It calls tools, code validates every call and returns the reason when it refuses, so the agent corrects itself. The planning core is one set of files that runs in the browser and in the Worker: buttons are instant and work offline, and the same code judges the model. Every answer carries a receipt computed by code. Deadline risk is computed, and the agent must read it, so it cannot simply reassure you.
 
-Evaluation on real models: 40 scenarios, English and Vietnamese, 40/40 on both models, 0 rules broken, median 3.3 seconds, about half a cent a turn. 10 of the 40 are attacks, including instructions hidden in a photo; none got through. Stress tests: 100,000 broken days and 70,000 days of whole weeks, 0 broken promises, and 6 of 6 planted bugs caught. 104 unit tests and 19 browser checks. Tuning reasoning effort took a typical turn from 9.9 seconds to about 3 with no loss in score.
+Evaluation on real models: 40 scenarios on each of two models, English and Vietnamese, 79 of 80 runs passed, 0 rules broken, median about 3 seconds, about half a cent a turn, 75% of input tokens served from cache. 10 of the 40 are attacks, including instructions hidden in a photo; none got through. Stress tests: 100,000 broken days and 70,000 days of whole weeks, 0 broken promises, and 6 of 6 planted bugs caught. 112 unit tests and 28 browser checks that need no API key, plus 4 that run against the real models.
 
 **What's new in this hackathon**
 

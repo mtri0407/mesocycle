@@ -63,7 +63,9 @@ export function readChatResponse(json) {
 }
 
 // Failures that are the provider's, not ours: trying the other model can help.
-const SWITCH_ON = new Set([404, 408, 429, 500, 502, 503, 504, 529]);
+// 401, 402 and 403 belong here because a key or credit running out at one
+// provider must not take the app down while the other one can answer.
+const SWITCH_ON = new Set([401, 402, 403, 404, 408, 429, 500, 502, 503, 504, 529]);
 
 export async function chat(env, opts, override) {
   const provider = pickProvider(env, override);
@@ -77,18 +79,34 @@ export async function chat(env, opts, override) {
   }
   const raw = await res.text();
   if (!res.ok) throw Object.assign(new Error(`${provider.label} HTTP ${res.status}: ${raw.slice(0, 300)}`), { status: res.status, canSwitch: SWITCH_ON.has(res.status) });
-  return { provider: provider.name, ms: Date.now() - started, ...readChatResponse(JSON.parse(raw)) };
+  let json;
+  try { json = readChatResponse(JSON.parse(raw)); }
+  catch { throw Object.assign(new Error(`${provider.label}: unreadable answer`), { canSwitch: true }); }
+  return { provider: provider.name, ms: Date.now() - started, ...json };
 }
+
+// After Meta fails, this copy of the Worker leaves it alone for a minute. A
+// stalled provider would otherwise cost every model call of a turn its full
+// timeout, one after another, while the person waits.
+const REST_MS = 60_000;
+let metaRestsUntil = 0;
+export const wakeMeta = () => { metaRestsUntil = 0; };
 
 // Meta first, Muse Spark Open if Meta fails. Never the other way round: a
 // person who chose the open model chose where their words go.
 export async function chatSafe(env, opts, prefer) {
   const first = prefer || env.MODEL_PROVIDER || 'meta';
+  const backup = first === 'meta' && !!env.BASETEN_API_KEY;
+  // The last resort, so it gets more time than a first try.
+  const openModel = async () => ({ ...(await chat(env, { ...opts, timeoutMs: 2 * (opts.timeoutMs || 30_000) }, 'open')), fellBack: true });
+  if (backup && Date.now() < metaRestsUntil) return openModel();
   try {
     return await chat(env, opts, first);
   } catch (err) {
-    if (first !== 'meta' || !err.canSwitch || !env.BASETEN_API_KEY) throw err;
-    return { ...(await chat(env, opts, 'open')), fellBack: true };
+    if (!backup || !err.canSwitch) throw err;
+    metaRestsUntil = Date.now() + REST_MS;
+    opts.onSwitch?.();
+    return openModel();
   }
 }
 
@@ -105,9 +123,10 @@ export async function transcribe(env, wav) {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.MODEL_API_KEY}`, Accept: 'text/plain' },
     body: form,
+    signal: AbortSignal.timeout(30_000),
   });
   const raw = await res.text();
-  if (!res.ok) throw new Error(`Muse Voice Transcribe HTTP ${res.status}: ${raw.slice(0, 300)}`);
+  if (!res.ok) throw Object.assign(new Error(`Muse Voice Transcribe HTTP ${res.status}: ${raw.slice(0, 300)}`), { status: res.status });
   const text = raw.split('\n').map((l) => l.replace(/^[A-Za-z]+:/, '').trim()).filter(Boolean).join(' ');
   return { text, ms: Date.now() - started };
 }

@@ -52,7 +52,10 @@ let visitorId = store.get('meso-visitor');
 if (!visitorId) { visitorId = crypto.randomUUID().replace(/-/g, '').slice(0, 24); store.set('meso-visitor', visitorId); }
 const aiHeaders = { 'Content-Type': 'application/json', 'X-Visitor': visitorId };
 let sid = store.get('meso-sid');
-let account = null, googleClientId = null, saveTimer = null;
+let account = null, googleClientId = null, saveTimer = null, retryTimer = null;
+// Set once the server has answered. Until the saved plan has been read, this
+// device writes nothing, so an old copy here cannot replace a newer one there.
+let configRead = false, cloudRead = false;
 const authHeaders = () => (sid ? { Authorization: `Bearer ${sid}` } : {});
 const CONSENT_VERSION = '2026-11-01';
 const consented = () => store.get('meso-consent') === CONSENT_VERSION;
@@ -61,21 +64,23 @@ function renderConsent() {
     $(id).checked = consented();
     $(id).closest('[data-consent]').hidden = consented();
   }
-  $('login-consent').closest('[data-consent]').hidden = consented() || !!account || !googleClientId;
+  $('login-consent').closest('[data-consent]').hidden = consented() || !!sid || !googleClientId;
 }
-function giveConsent() { store.set('meso-consent', CONSENT_VERSION); renderConsent(); renderAccount(); }
+function giveConsent() { store.set('meso-consent', CONSENT_VERSION); renderConsent(); renderAccount(); loadGoogle(); }
 function renderAccount() {
-  $('account-text').textContent = (account ? t('signedIn')(account.name) : googleClientId ? t('signedOut') : t('authOff')) + (stats.days.length ? ' ' + t('statsLine')(stats) : '');
-  $('logout').hidden = !account;
+  const who = account ? t('signedIn')(account.name) : sid ? t('signedInOffline') : configRead && !googleClientId ? t('authOff') : t('signedOut');
+  $('account-text').textContent = who + (stats.days.length ? ' ' + t('statsLine')(stats) : '');
+  $('logout').hidden = !sid;
   $('delete-data').hidden = !account;
   $('logout').textContent = t('logout');
-  $('gsi').hidden = !!account || !googleClientId || !consented();
+  $('gsi').hidden = !!sid || !googleClientId || !consented();
 }
 let savedSig = '';
+// The clock moves every minute; that alone is not worth a write.
+const planSig = () => JSON.stringify([template, state?.queue, state?.fixed, stats]);
 function scheduleSave() {
-  if (!sid || mode !== 'real' || template?.sample) return;
-  // The clock moves every minute; that alone is not worth a write.
-  const sig = JSON.stringify([template, state?.queue, state?.fixed, stats]);
+  if (!sid || !cloudRead || mode !== 'real' || template?.sample) return;
+  const sig = planSig();
   if (sig === savedSig) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => saveNow(sig), 1500);
@@ -93,50 +98,76 @@ function saveNow(sig, keepalive = false) {
     .catch(() => {
       savedSig = '';
       $('save-note').hidden = false;
-      setTimeout(scheduleSave, 30000);
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(scheduleSave, 30000);
     });
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && saveTimer) { clearTimeout(saveTimer); saveNow(JSON.stringify([template, state?.queue, state?.fixed, stats]), true); }
+  if (document.hidden && saveTimer) { clearTimeout(saveTimer); saveNow(planSig(), true); }
 });
 function useCloud(data) {
   if (!data || !data.template) return false;
   // Two copies of one plan: the newer one wins, whichever device it is on.
-  if ((template?.updatedAt || 0) > (data.template.updatedAt || 0)) { setMode('real'); scheduleSave(); return true; }
-  template = data.template; store.set('meso-template', JSON.stringify(template));
-  state = data.state; store.set('meso-state', JSON.stringify(state));
-  if (data.stats) { stats = data.stats; saveStats(); }
+  if ((template?.updatedAt || 0) > (data.template.updatedAt || 0)) {
+    // A newer week here, but the screen was on the demo: that day is not this person's.
+    if (mode !== 'real') { state = null; store.set('meso-state', ''); }
+  } else {
+    template = data.template; store.set('meso-template', JSON.stringify(template));
+    state = data.state; store.set('meso-state', JSON.stringify(state));
+    if (data.stats) { stats = data.stats; saveStats(); }
+    savedSig = planSig();
+  }
   setMode('real');
   return true;
 }
-function signOutLocal() { sid = null; account = null; store.set('meso-sid', ''); renderAccount(); }
+// The server's copy has arrived. If it changes what is on screen, the day
+// opens again from it, as a new plan.
+async function adoptCloud(data) {
+  const was = { mode, template };
+  if (useCloud(data) && (was.mode !== 'real' || template !== was.template)) { startPlan(); await openDay(); }
+  scheduleSave();
+}
+function signOutLocal() { sid = null; account = null; cloudRead = false; store.set('meso-sid', ''); renderAccount(); loadGoogle(); }
 async function onGoogle(resp) {
   try {
     const data = await api('/api/login', { credential: resp.credential, consent: CONSENT_VERSION });
-    sid = data.sid; store.set('meso-sid', sid); account = data.user;
+    sid = data.sid; store.set('meso-sid', sid); account = data.user; cloudRead = true;
     renderAccount();
-    if (useCloud(data.data)) { await tick(); if (state) { state.now = Math.max(state.now, realNow()); await refresh(); } }
-    else if (mode === 'real') scheduleSave();
+    await adoptCloud(data.data);
   } catch (e) { $('account-text').textContent = e.message; }
 }
-async function initAccount() {
-  try { const c = await api('/api/config'); googleClientId = c.googleClientId; vapidPublic = c.vapidPublic; offline(false); } catch { offline(true); }
-  if (sid) {
-    const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
-    // Only the server saying no ends a session. Being offline does not.
-    if (r?.ok) { account = r.user; useCloud(r.data); } else if (r?.code === 'auth') signOutLocal();
-  }
+const getJson = (path, headers = {}) => fetch(path, { headers, signal: AbortSignal.timeout(6000) }).then((r) => r.json()).catch(() => null);
+// The network part of starting up. It runs after the first draw, and again when
+// a connection comes back, so a slow network never holds the plan on screen.
+async function connect() {
+  if (configRead && (cloudRead || !sid)) return;
+  const [config, saved] = await Promise.all([
+    configRead ? null : getJson('/api/config'),
+    sid && !cloudRead ? getJson('/api/data', authHeaders()) : null,
+  ]);
+  offline(!config && !saved);
+  if (config?.ok) { configRead = true; googleClientId = config.googleClientId; vapidPublic = config.vapidPublic; }
+  // Only the server saying no ends a session. Being offline does not.
+  if (saved?.ok) { cloudRead = true; account = saved.user; await adoptCloud(saved.data); }
+  else if (saved?.code === 'auth') signOutLocal();
+  $('save-note').hidden = !sid || cloudRead;
   renderConsent();
   renderAccount();
-  if (googleClientId && !account) {
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
-    s.onload = () => {
-      google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogle });
-      google.accounts.id.renderButton($('gsi'), { theme: 'outline', size: 'medium', text: 'signin_with', locale: lang });
-    };
-    document.head.appendChild(s);
-  }
+  renderRemind();
+  loadGoogle();
+}
+// Google's script is only fetched for someone about to use its button.
+let googleLoaded = false;
+function loadGoogle() {
+  if (googleLoaded || !googleClientId || sid || !consented()) return;
+  googleLoaded = true;
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+  s.onload = () => {
+    google.accounts.id.initialize({ client_id: googleClientId, callback: onGoogle });
+    google.accounts.id.renderButton($('gsi'), { theme: 'outline', size: 'medium', text: 'signin_with', locale: lang });
+  };
+  document.head.appendChild(s);
 }
 
 let lang = store.get('meso-lang') || (navigator.language.startsWith('vi') ? 'vi' : 'en');
@@ -146,30 +177,37 @@ const t = (k) => T[lang][k];
 function applyLang() {
   document.documentElement.lang = lang;
   $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
-  if (typeof renderAccount === 'function') renderAccount();
+  renderAccount();
   $('guide').textContent = lang === 'vi' ? 'Hướng dẫn' : 'Guide';
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
   $('say').placeholder = t('placeholder');
   $('setup-text').placeholder = t('setupPlaceholder');
+  $('say').setAttribute('aria-label', t('changed'));
+  $('setup-text').setAttribute('aria-label', t('setupTitle'));
+  $('fb-text').setAttribute('aria-label', t('feedback'));
   $('setup-mic').textContent = recorder && micTarget === 'setup' ? t('stop') : t('speak');
   $('setup-photo-chip').textContent = t('photoAdded');
   $('mic').textContent = recorder && micTarget === 'say' ? t('stop') : t('speak');
   renderIntro();
-  if (view) { render(); renderExtras(); }
+  if (view) { render(); renderExtras(); renderImport(); }
 }
 
 function renderIntro() {
   // The intro explains the demo, so it stays out of the way once the week is yours.
   $('intro').hidden = mode === 'real' || store.get('meso-intro') === 'hidden';
   if ($('intro').hidden) return;
-  $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
+  $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button>${ownWeek() ? `<button id="to-week">${t('toWeek')}</button>` : ''}<button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
   $('try').onclick = tryDemo;
   $('setup-open').onclick = openSetup;
   $('sample-open').onclick = loadSample;
   $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
+  if (ownWeek()) $('to-week').onclick = backToWeek;
 }
+const ownWeek = () => !!template && !template.sample;
+async function backToWeek() { setMode('real'); state = null; startPlan(); await openDay(); }
 
-const errMsg = (d) => (d && d.code === 'rate' ? t('errRate') : d && d.code === 'cap' ? t('errCap') : d && d.code === 'region' ? t('errRegion') : (d && d.error) || t('errNet'));
+const CODES = { rate: 'errRate', cap: 'errCap', region: 'errRegion', ai: 'errAi' };
+const errMsg = (d) => (CODES[d?.code] ? t(CODES[d.code]) : d?.error || t('errNet'));
 async function api(path, body) {
   // Planning runs here in the browser. Only AI and accounts use the network.
   const [route, query] = path.split('?');
@@ -179,17 +217,22 @@ async function api(path, body) {
     return data;
   }
   let res;
-  try { res = await fetch(path, body ? { method: 'POST', headers: aiHeaders, body: JSON.stringify(body) } : {}); }
+  // Long enough for three tries at building a week, short enough to never hang.
+  try { res = await fetch(path, { ...(body ? { method: 'POST', headers: aiHeaders, body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(150000) }); }
   catch { throw new Error(t('errNet')); }
   const data = await res.json().catch(() => ({}));
   if (!data.ok && !data.state) throw Object.assign(new Error(errMsg(data)), { code: data.code });
   return data;
 }
 
-function apply(data) {
+// A result arrives in two steps, so the week can be updated between them and
+// everything drawn next (radar, goals, forecast) already counts it.
+function adopt(data) {
   if (data.template) { template = data.template; saveTemplate(); }
   if (data.state) state = data.state;
   if (data.view) view = data.view;
+}
+function draw() {
   if (mode === 'real' && template && state) {
     state.radar = deadlineRadar(template, state, { date: state.date, weekday: realDay() });
     view.deadlines = state.radar;
@@ -200,6 +243,7 @@ function apply(data) {
   scheduleSave();
   syncReminders();
 }
+function apply(data) { adopt(data); draw(); }
 
 let weekSeq = 0;
 async function loadWeek() {
@@ -221,15 +265,25 @@ async function loadWeek() {
 }
 
 async function resetDay(time = '07:00') {
+  startPlan();
   apply(await api(`/api/demo?now=${time}&lang=${lang}`));
-  clearChat();
 }
 
-// A new day or a new plan starts a new conversation: an old proposal no longer applies.
-function clearChat() {
+// A new day or a new plan starts clean, and this is the one place that says
+// what that means: the conversation, a proposal, undo, half-made edits, and any
+// AI answer still on its way all belonged to the old plan.
+let run = 0;
+function startPlan() {
+  run++;
+  sendCtl?.abort();
+  sendCtl = null;
+  $('send').disabled = false;
   chatLog = [];
   pendingProposal = null;
   undoStack.length = 0;
+  draft = null; nextPlan = null; importList = null; reviewOpen = false;
+  $('edit-bar').hidden = true;
+  renderImport();
   renderThread();
   $('answer').innerHTML = ''; $('live-steps').innerHTML = ''; $('status').textContent = '';
 }
@@ -357,14 +411,23 @@ function recordDone(id, roleId, minutes) {
   template.actuals = state.actuals;
   saveTemplate();
 }
+function markDebt(ids) {
+  if (mode !== 'real' || !template) return;
+  for (const id of ids) { const task = template.tasks.find((x) => x.id === id); if (task) task.debt = true; }
+  saveTemplate();
+}
 function syncAgent(before) {
   if (mode !== 'real' || !template) return;
   const was = new Map(before.queue.map((q) => [q.id, q.status]));
-  for (const q of state.queue) {
-    if (was.get(q.id) === q.status) continue;
-    if (q.status === 'done') recordDone(q.id, q.roleId, (state.actuals || []).at(-1)?.actual || q.minutes);
-    if (q.status === 'skipped' || q.status === 'cut') { const task = template.tasks.find((x) => x.id === q.id); if (task) { task.debt = true; saveTemplate(); } }
+  const changed = state.queue.filter((q) => was.get(q.id) !== q.status);
+  // One turn can finish several items, each with its own real minutes.
+  const spent = (state.actuals || []).slice(before.actuals?.length || 0);
+  for (const q of changed.filter((x) => x.status === 'done')) {
+    const i = spent.findIndex((a) => a.roleId === q.roleId);
+    recordDone(q.id, q.roleId, i >= 0 ? spent.splice(i, 1)[0].actual : q.minutes);
   }
+  markDebt(changed.filter((q) => q.status === 'skipped' || q.status === 'cut').map((q) => q.id));
+  if (changed.some((q) => q.status === 'cut')) count('approve'); // chosen out loud
 }
 
 async function morningCheckin() {
@@ -384,22 +447,24 @@ async function morningCheckin() {
 }
 
 async function act(kind, item) {
+  if (sendCtl) return; // the agent is changing this plan right now
   let args;
   if (kind === 'done') {
     // Real minutes spent: from the item's start to the clock, if the clock moved on.
     const spent = state.now > dayMin(item.start) ? state.now - dayMin(item.start) : span(item);
     args = { id: item.id, status: 'done', minutes: spent };
-    state.now = Math.max(state.now, dayMin(item.end));
+    // The demo clock stands still, so finishing moves it on. On a real day the
+    // next block simply starts now, even if this one ended early.
+    if (!realClock()) state.now = Math.max(state.now, dayMin(item.end));
   } else if (kind === 'more') {
     args = { id: item.id, status: 'more_time', minutes: 15 };
   } else {
     args = { id: item.id, status: 'skipped' };
   }
-  apply(await api('/api/tool', { state, name: 'update_item', args }));
-  if (mode === 'real' && template && kind === 'skip') { const task = template.tasks.find((x) => x.id === item.id); if (task) { task.debt = true; saveTemplate(); } }
-  if (mode === 'real' && template && kind === 'done') {
-    recordDone(item.id, item.role, args.minutes);
-  }
+  adopt(await api('/api/tool', { state, name: 'update_item', args }));
+  if (kind === 'skip') markDebt([item.id]);
+  if (kind === 'done' && mode === 'real' && template) recordDone(item.id, item.role, args.minutes);
+  draw();
 }
 
 
@@ -419,7 +484,9 @@ document.querySelectorAll('#tabs button').forEach((b) => { b.onclick = () => sho
 const roleIdx = (id) => { const list = template && mode === 'real' ? template.roles : view ? view.roles : []; return Math.max(0, list.findIndex((r) => r.id === id)) % 8; };
 const rcStyle = (id) => `--rc:var(--r${roleIdx(id)})`;
 const hrs = (m) => (Math.round(m / 6) / 10).toString();
-const realDay = () => (mode === 'real' ? new Date().getDay() : 5);
+// Before 04:00 it is still yesterday, for the weekday as for the date.
+const realDay = () => (mode === 'real' ? today().weekday : 5);
+const realClock = () => mode === 'real' && !template?.sample;
 
 let weekData = null, reviewOpen = false, nextPlan = null, draft = null;
 
@@ -498,7 +565,7 @@ async function loadSample() {
   // A week the person already has is kept aside, not overwritten.
   if (template && !template.sample) store.set('meso-own', JSON.stringify(template));
   setMode('real');
-  clearChat();
+  startPlan();
   apply(await api('/api/sample', { ...today(), lang }));
   showTab('today');
 }
@@ -506,7 +573,7 @@ async function exitSample() {
   let own = null;
   try { own = JSON.parse(store.get('meso-own')); } catch {}
   store.set('meso-own', '');
-  if (own) { template = own; saveTemplate(); apply(await api('/api/day', { template, ...today(), now: realNow() })); return; }
+  if (own) { startPlan(); template = own; await newDay(); return; }
   template = null;
   store.set('meso-template', '');
   setMode('demo');
@@ -631,8 +698,10 @@ async function shareWeek(r) {
 async function planNext(review) {
   $('next-go').disabled = true;
   $('next-status').textContent = t('nextThinking');
+  const mine = run;
   try {
     const data = await api('/api/setup', { previous: template, review, lang, provider: provider() });
+    if (mine !== run) return;
     nextPlan = data.next;
     renderReview();
   } catch (e) {
@@ -645,7 +714,7 @@ async function approveNext(closed) {
   if (closed) {
     const data = await api('/api/edit', { template, next: nextPlan, state, weekday: realDay(), lang });
     data.template.reviewedWeek = closed.weekStart;
-    nextPlan = null;
+    startPlan();
     apply(data);
   } else {
     // The week is still running, so the new plan waits for Monday.
@@ -805,9 +874,11 @@ async function importDoc(file, name) {
   const note = $('import-status');
   note.textContent = t('importing');
   $('import-open').disabled = $('import-sample').disabled = true;
+  const mine = run;
   try {
     const data = file.type === 'application/pdf' ? await readAsDataUrl(file) : await shrink(file);
     const out = await api('/api/import', { file: data, name, date: state.date, lang, provider: provider() });
+    if (mine !== run) return;
     if (!out.deadlines.length && !out.events.length) { note.textContent = t('importEmpty'); return; }
     note.textContent = '';
     importList = [
@@ -978,8 +1049,9 @@ const voicesReady = () => new Promise((done) => {
   synth.addEventListener('voiceschanged', done, { once: true });
   setTimeout(done, 2000);
 });
-async function speakOut(text) {
+async function speakOut(text, call) {
   await voicesReady();
+  if (callNow !== call) return undefined; // ended while the voices were loading
   return new Promise((resolve) => {
     const synth = window.speechSynthesis;
     const want = VI_CHARS.test(text) ? 'vi' : 'en';
@@ -1003,55 +1075,68 @@ function spokenAnswer(done) {
   return `${done.reply || p?.message || ''} ${options}${p ? ` ${t('whichOne')}` : ''}`.trim();
 }
 async function callTurn(text) {
+  const me = callNow;
   callPhase('thinking');
   $('call-live').textContent = text;
   $('call-reply').textContent = '';
   const done = await send(text, null, { call: true });
-  if (!callNow) return;
+  if (callNow !== me) return;
   const line = done ? spokenAnswer(done) : $('status').textContent || t('errNet');
   $('call-reply').textContent = line;
   callPhase('speaking');
-  await speakOut(line);
-  if (callNow) callNow.heard = Date.now();
+  await speakOut(line, me);
+  if (callNow !== me) return;
+  me.heard = Date.now();
   callPhase('listening');
 }
+// When voice cannot run, the plain way is always there.
+function typeInstead(message) {
+  $('status').textContent = message;
+  $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('say').focus();
+}
 async function startCall() {
-  if (callNow) return;
+  if (callNow || $('call').disabled) return;
+  $('call').disabled = true; // the permission prompt can take a while
   // Browsers only allow speech that starts from a tap, so it starts here.
   window.speechSynthesis?.getVoices();
   window.speechSynthesis?.speak(new SpeechSynthesisUtterance(''));
-  if (!(await askConsent())) return;
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-  catch { $('status').textContent = t('noMic'); return; }
+  let stream = null;
+  if (await askConsent()) {
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch { typeInstead(t('noMic')); }
+  }
+  $('call').disabled = false;
+  if (!stream) return;
   showTab('today');
   count('call');
   $('call').hidden = true;
   const ws = new WebSocket(voiceUrl('&call=1'));
   ws.binaryType = 'arraybuffer';
-  callNow = { ws, stream, phase: 'speaking', stopMic: null, heard: Date.now(), lock: null };
-  navigator.wakeLock?.request('screen').then((l) => { if (callNow) callNow.lock = l; else l.release(); }).catch(() => {});
+  const me = { ws, stream, phase: 'speaking', stopMic: null, heard: Date.now(), lock: null };
+  callNow = me;
+  navigator.wakeLock?.request('screen').then((l) => { if (callNow === me) me.lock = l; else l.release(); }).catch(() => {});
   ws.onopen = () => ws.send(JSON.stringify({ keywords: planWords() }));
   $('call-box').hidden = false;
   $('call-live').textContent = ''; $('call-reply').textContent = ''; $('call-note').textContent = '';
   callPhase('speaking');
   ws.onmessage = ({ data }) => {
     const m = JSON.parse(data);
-    if (!callNow || callNow.phase !== 'listening') return;
-    if (m.type === 'transcript' && m.text) { $('call-live').textContent = m.text; callNow.heard = Date.now(); }
+    if (callNow !== me || me.phase !== 'listening') return;
+    if (m.type === 'transcript' && m.text) { $('call-live').textContent = m.text; me.heard = Date.now(); }
     if (m.type === 'turn' && m.text.trim()) { beep(); callTurn(m.text.trim()); }
   };
-  ws.onclose = () => endCall();
-  ws.onerror = () => { $('status').textContent = t('errNet'); };
-  callNow.stopMic = micFrames(stream, (frame) => {
-    if (ws.readyState === 1) ws.send(callNow?.phase === 'listening' ? frame : SILENCE);
+  // Only this call: the socket of an older one can close late.
+  ws.onclose = () => { if (callNow === me) { endCall(); typeInstead(t('callLost')); } };
+  me.stopMic = micFrames(stream, (frame) => {
+    if (ws.readyState === 1) ws.send(me.phase === 'listening' ? frame : SILENCE);
   });
-  await speakOut(t('callHello'));
-  if (!callNow) return; // ended during the greeting
+  await speakOut(t('callHello'), me);
+  if (callNow !== me) return; // ended during the greeting
   callPhase('listening');
   // A forgotten call must not keep the microphone open.
-  callNow.idle = setInterval(() => {
-    if (callNow?.phase === 'listening' && Date.now() - callNow.heard > 90000) endCall();
+  me.idle = setInterval(() => {
+    if (callNow === me && me.phase === 'listening' && Date.now() - me.heard > 90000) endCall();
   }, 5000);
 }
 function endCall() {
@@ -1086,12 +1171,17 @@ $('photo-file').onchange = async () => {
   const file = $('photo-file').files[0];
   $('photo-file').value = '';
   if (!file) return;
-  const image = await shrink(file);
+  let image;
+  try { image = await shrink(file); }
+  catch { (photoTarget === 'setup' ? $('setup-status') : $('status')).textContent = t('errPhoto'); return; }
   if (photoTarget === 'setup') { setupImage = image; $('setup-photo-chip').hidden = false; return; }
   send($('say').value.trim() || (lang === 'vi' ? 'Thêm những gì trong ảnh vào hôm nay.' : 'Add what is in this photo to today.'), image);
 };
 
 $('send').onclick = () => send();
+$('say').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+});
 
 // Agent call, streamed: each tool step appears as soon as it happens.
 const provider = () => (store.get('meso-private') === '1' ? 'open' : 'meta');
@@ -1117,12 +1207,19 @@ function askConsent() {
 }
 
 // Memory of the conversation, and a proposal still waiting for an answer.
-let chatLog = [], pendingProposal = null;
+let chatLog = [], pendingProposal = null, sendCtl = null;
 async function send(textArg, image = null, opts = {}) {
   const text = (textArg ?? $('say').value).trim();
-  if (!text) return null;
+  if (!text || sendCtl) return null; // one turn at a time
   if (!navigator.onLine) { $('status').textContent = t('offlineAi'); return null; }
   if (!opts.demo && !(await askConsent())) return null;
+  const ctl = new AbortController();
+  sendCtl = ctl;
+  // Nobody should wait for ever on a stream that went quiet. In the guided
+  // demo, patience is shorter: the recording is ready to take over.
+  let quiet;
+  const alive = () => { clearTimeout(quiet); quiet = setTimeout(() => ctl.abort(), opts.demo ? 20000 : 60000); };
+  alive();
   $('send').disabled = true;
   $('status').textContent = image ? t('readingPhoto') : t('thinking');
   $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
@@ -1131,7 +1228,7 @@ async function send(textArg, image = null, opts = {}) {
   const beforeWeek = template;
   const snap = snapshot();
   try {
-    const res = await fetch('/api/agent', { method: 'POST', headers: aiHeaders, body: JSON.stringify({ state, text, image, provider: provider(), stream: true, lang, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
+    const res = await fetch('/api/agent', { method: 'POST', signal: ctl.signal, headers: aiHeaders, body: JSON.stringify({ state, text, image, provider: provider(), stream: true, lang, call: !!opts.call, template: mode === 'real' ? template : null, pending: pendingProposal, history: chatLog.slice(-8), weekday: realDay() }) });
     if (!res.ok || !res.body) throw new Error(errMsg(await res.json().catch(() => ({}))));
     offline(false);
     const reader = res.body.getReader();
@@ -1140,6 +1237,7 @@ async function send(textArg, image = null, opts = {}) {
     for (;;) {
       const { value, done: end } = await reader.read();
       if (end) break;
+      alive();
       buf += dec.decode(value, { stream: true });
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
@@ -1151,13 +1249,15 @@ async function send(textArg, image = null, opts = {}) {
           if (msg.ok && msg.state) { state = msg.state; view = msg.view; render(); } // the plan moves while the agent works
         }
         if (msg.type === 'council') councilProgress(msg);
+        if (msg.type === 'switch') $('status').textContent = t('switching');
         if (msg.type === 'done') done = msg;
       }
     }
-    if (!done || !done.ok) throw new Error(done?.error || 'No answer');
+    if (!done?.ok) throw new Error(errMsg(done || { code: 'ai' }));
     undoStack.push(snap);
-    apply(done);
+    adopt(done);
     syncAgent(before);
+    draw();
     done.receipt = receiptHtml(before, beforeWeek, done);
     count('replan');
     chatLog.push({ role: 'user', content: text }, { role: 'assistant', content: done.reply });
@@ -1168,12 +1268,14 @@ async function send(textArg, image = null, opts = {}) {
     $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s${done.fellBack ? ` · ${t('fellBack')}` : ''}`;
     return done;
   } catch (e) {
+    if (ctl !== sendCtl) return null; // the plan moved on, and this answer with it
     const noNet = e instanceof TypeError;
     if (noNet) offline(true);
-    $('status').textContent = noNet ? t('offlineAi') : e.message;
+    $('status').textContent = ctl.signal.aborted ? t('errSlow') : noNet ? t('offlineAi') : e.message;
     return null;
   } finally {
-    $('send').disabled = false;
+    clearTimeout(quiet);
+    if (ctl === sendCtl) { sendCtl = null; $('send').disabled = false; }
   }
 }
 
@@ -1211,13 +1313,15 @@ function receiptHtml(before, beforeWeek, data) {
 
 // Anything the AI changed can be taken back.
 const undoStack = [];
-const snapshot = () => ({ state: JSON.stringify(state), template: JSON.stringify(template) });
+const snapshot = () => ({ state: JSON.stringify(state), template: JSON.stringify(template), stats: JSON.stringify(stats) });
 async function undo() {
   const s = undoStack.pop();
   if (!s) return;
   template = JSON.parse(s.template);
   if (template) saveTemplate();
   state = JSON.parse(s.state);
+  stats = JSON.parse(s.stats);
+  saveStats();
   pendingProposal = null;
   await refresh();
   $('answer').innerHTML = `<p class="reply muted">${t('undone')}</p>`;
@@ -1228,13 +1332,17 @@ const keptToday = (ids) => replan(applyEvent(state, { type: 'cut', ids })).place
 function showAnswer(data) {
   const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
   const p = data.proposal;
+  // What every option moves is not the choice, so it is said once, and each
+  // card shows only what makes it different.
+  const both = p && p.options.length > 1 ? p.options[0].ids.filter((id) => p.options.every((o) => o.ids.includes(id))) : [];
   $('live-steps').innerHTML = '';
   $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
+    (both.length ? `<p class="hint">${t('eitherWay')}: ${esc(both.map(title).join(', '))}</p>` : '') +
     (p ? p.options.map((o, i) => `<div class="option ${o.by || ''}">
       <div class="row" style="justify-content:space-between"><strong>${t('guardian')[o.by] || (i === 0 ? t('suggested') : t('or'))}</strong>${o.suggested && !p.agreed ? `<span class="chip">${t('suggested')}</span>` : ''}</div>
       ${o.why ? `<p style="margin:6px 0 0">${esc(o.why)}</p>` : ''}
       <p style="margin:8px 0 0;font-size:14px"><b>${t('keeps')}:</b> ${esc(keptToday(o.ids).join(', ')) || '-'}</p>
-      <p class="hint" style="margin:4px 0 8px"><b>${t('moveToDebt')}:</b> ${esc(o.ids.map(title).join(', '))}</p>
+      <p class="hint" style="margin:4px 0 8px"><b>${t('moveToDebt')}:</b> ${esc(o.ids.filter((id) => !both.includes(id)).map(title).join(', ')) || '-'}</p>
       <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
     `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
       <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
@@ -1243,10 +1351,11 @@ function showAnswer(data) {
     b.onclick = async () => {
       const { ids } = p.options[Number(b.dataset.opt)];
       undoStack.push(snapshot());
-      apply(await api('/api/approve', { state, ids }));
+      adopt(await api('/api/approve', { state, ids }));
+      markDebt(ids);
+      draw();
       pendingProposal = null;
       count('approve');
-      if (mode === 'real' && template) { for (const id of ids) { const task = template.tasks.find((x) => x.id === id); if (task) task.debt = true; } saveTemplate(); }
       $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p><button class="small" id="undo">${t('undo')}</button>`;
       $('undo').onclick = undo;
     };
@@ -1256,7 +1365,10 @@ function showAnswer(data) {
 // If the AI cannot answer during the guided demo, a recording of one real
 // run plays instead, and says so.
 async function playRecording() {
-  const events = await fetch(`/core/replay-${lang}.json`).then((r) => r.json());
+  const mine = run;
+  const events = await fetch(`/core/replay-${lang}.json`).then((r) => r.json()).catch(() => null);
+  if (mine !== run) return;
+  if (!events) { $('status').textContent = t('errNet'); return; }
   $('send').disabled = true;
   $('status').textContent = t('recording');
   $('live-steps').innerHTML = '';
@@ -1264,6 +1376,7 @@ async function playRecording() {
   const before = state;
   for (const e of events) {
     await new Promise((r) => setTimeout(r, Math.min(1500, (e.at - last) / 2)));
+    if (mine !== run) return;
     last = e.at;
     if (e.type === 'step') {
       $('live-steps').insertAdjacentHTML('beforeend', stepHtml(e));
@@ -1286,13 +1399,14 @@ async function tryDemo() {
   const cap = (k) => $('captions').insertAdjacentHTML('beforeend', `<p class="caption">${t(k)}</p>`);
   $('captions').innerHTML = '';
   await resetDay('17:00');
+  const mine = run; // pressing Reset or Try again takes over from here
   cap('cap1');
   $('say').value = t('demoText');
   cap('cap2');
   $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
   const live = await send(undefined, null, { demo: true });
-  if (!live) await playRecording();
-  cap('cap3');
+  if (mine === run && !live) await playRecording();
+  if (mine === run) cap('cap3');
 }
 
 function openSetup() {
@@ -1303,7 +1417,7 @@ function openSetup() {
 }
 $('setup-cancel').onclick = () => { $('setup').hidden = true; };
 $('rebuild').onclick = openSetup;
-$('to-demo').onclick = async () => { draft = null; $('edit-bar').hidden = true; setMode('demo'); await resetDay('07:00'); };
+$('to-demo').onclick = async () => { setMode('demo'); await resetDay('07:00'); };
 $('setup-go').onclick = async () => {
   const text = $('setup-text').value.trim();
   if (!text && !setupImage) return;
@@ -1317,7 +1431,7 @@ $('setup-go').onclick = async () => {
     setMode('real');
     if (!sid) $('setup-status').textContent = t('signedOut');
     $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
-    clearChat();
+    startPlan();
     apply(data);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
@@ -1328,10 +1442,26 @@ $('setup-go').onclick = async () => {
 };
 
 // Real mode follows the real clock; a new day is built from the template.
+// That is not an edit, so the time of the last change stays: a copy changed
+// on another device is still the newer one.
+async function newDay(previous) {
+  const { updatedAt } = template;
+  adopt(await api('/api/day', { template, state: previous, ...today(), now: realNow() }));
+  template.updatedAt = updatedAt;
+  store.set('meso-template', JSON.stringify(template));
+  draw();
+}
+let started = false; // the morning check-in waits until the saved plan has been read
 async function tick() {
-  if (mode !== 'real' || !state || template?.sample || $('send').disabled) return;
+  if (mode !== 'real' || !state || template?.sample || sendCtl) return;
   const d = today();
-  if (state.date !== d.date && template) { clearChat(); apply(await api('/api/day', { template, state, ...d, now: realNow() })); morningCheckin(); return; }
+  if (state.date !== d.date && template) {
+    if (callNow || draft) return; // the new day can wait for the end of a call or an edit
+    startPlan();
+    await newDay(state);
+    if (started) morningCheckin();
+    return;
+  }
   if (realNow() > state.now) { state.now = realNow(); await refresh(); }
 }
 setInterval(tick, 60000);
@@ -1342,10 +1472,14 @@ $('lang').onclick = async () => {
   applyLang();
   if (mode === 'demo') await resetDay(view ? view.now : '07:00');
 };
-$('reset').onclick = () => { setMode('demo'); resetDay($('clock').value || '07:00'); };
-$('clock').onchange = async () => { state.now = toMin($('clock').value); await refresh(); };
+$('reset').onclick = () => { store.set('meso-intro', ''); setMode('demo'); resetDay($('clock').value || '07:00'); };
+$('clock').onchange = async () => {
+  if (!$('clock').value) return; // the field was just cleared
+  state.now = toMin($('clock').value);
+  await refresh();
+};
 $('logout').onclick = async () => {
-  await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: '{}' }).catch(() => {});
+  await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: '{}', signal: AbortSignal.timeout(4000) }).catch(() => {});
   if (window.google) google.accounts.id.disableAutoSelect();
   clearLocal();
   location.reload();
@@ -1381,19 +1515,39 @@ $('fb-send').onclick = async () => {
 };
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// A failure nobody planned for still says something, and says the plan is safe.
+addEventListener('unhandledrejection', () => { $('status').textContent = t('errApp'); });
 // navigator.onLine can be wrong, so a failed request also counts.
 const offline = (on) => { $('offline-bar').hidden = !on; };
 const onlineBar = () => offline(!navigator.onLine);
-addEventListener('online', onlineBar);
+addEventListener('online', () => { onlineBar(); connect(); scheduleSave(); });
 addEventListener('offline', onlineBar);
 onlineBar();
 
+// Today, from what is on this device.
+async function openDay() {
+  if (mode !== 'real' || !template) { if (state) await refresh(); else await resetDay(); return; }
+  await tick();
+  if (!state) { await newDay(); return; }
+  if (realClock()) state.now = Math.max(state.now, realNow());
+  await refresh();
+}
+
 (async () => {
+  $('font').media = 'all'; // loaded this way so a slow font never holds the first screen
   showTab(tab);
   applyLang();
-  await initAccount();
   try { state = JSON.parse(store.get('meso-state')); } catch { state = null; }
   setMode(mode);
-  if (mode === 'real' && template) { state = state || null; await tick(); if (state) { if (!template.sample) state.now = Math.max(state.now, realNow()); await refresh(); } else apply(await api('/api/day', { template, ...today(), now: realNow() })); morningCheckin(); }
-  else if (state) await refresh(); else await resetDay();
+  renderConsent();
+  // The plan is on this device, so it draws first; the network comes after.
+  try { await openDay(); } catch {
+    // A saved day this version cannot read must not leave a blank screen.
+    state = null;
+    try { await openDay(); } catch { setMode('demo'); await resetDay(); }
+  }
+  document.body.classList.add('ready');
+  await connect();
+  started = true;
+  morningCheckin();
 })();

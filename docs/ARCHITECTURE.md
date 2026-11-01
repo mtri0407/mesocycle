@@ -98,6 +98,25 @@ Times measured on the live app for this scenario: the plan changes after about 2
 
 **Reminders carry no content.** A push is only a signal. The sentence on the notification is fixed in the service worker, so no task name passes through a push service.
 
+**One place decides what a new plan means.** A reset, a new day, a sample, a new week and a copy arriving from another device all go through `startPlan()`. It drops the conversation, a waiting proposal, undo, half-made edits, and any AI answer still on its way, so a late answer can never land on a plan it was not written for.
+
+**The plan draws before the network.** The first screen comes from the device. Accounts and the saved copy load after it, with a time limit, so a bad connection slows nothing that does not need one.
+
+**A device reads before it writes.** Until the saved copy has been read, nothing is sent. An old phone coming back online cannot replace what a laptop saved in the meantime.
+
+**A new day is not an edit.** Rolling over keeps the time of the last real change. Otherwise simply opening an old device each morning would make its copy look newest.
+
+## When a provider fails
+
+| What happens | What the person sees |
+|---|---|
+| One model call takes over 15 seconds, or Meta answers 401, 402, 403, 404, 408, 429 or 5xx, or the answer cannot be read | Muse Spark Open answers in the same turn, and the app says so |
+| Meta failed a moment ago | Meta rests for 60 seconds, so the calls that follow do not each wait for a timeout |
+| Muse Spark Open also fails | "The AI is not answering right now." Provider details stay in the log, the plan is untouched |
+| The stream goes quiet (60 seconds, or 20 in the guided demo) | The turn is dropped with a message. In the demo, the labelled recording takes over |
+| A person chose private mode | Never sent to Meta, even when that means no answer. The choice of where words go is theirs |
+| A PDF, when Meta is down | A plain failure. Only Meta reads PDFs, so it is not sent to a provider that cannot |
+
 ## Limits, on purpose
 
 - Plans live in the browser, with a copy in Cloudflare KV for people who sign in. Two devices: the latest save wins.

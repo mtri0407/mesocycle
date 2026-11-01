@@ -51,6 +51,13 @@ export const noDashes = (s) => s.replace(DASHES, ', ');
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries
 
+// What is said when the loop has to stop by itself. These come from code, so
+// they are not in the person's language unless they are written here.
+const STOPPED = {
+  en: { rejections: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', steps: 'That took too many steps. Here is the plan as it stands.', silent: 'Here is the plan as it stands.' },
+  vi: { rejections: 'Mình chưa tìm được thay đổi nào hợp lệ. Kế hoạch chỉ đổi đúng những gì đang hiện.', steps: 'Việc này cần quá nhiều bước. Đây là kế hoạch hiện tại.', silent: 'Đây là kế hoạch hiện tại.' },
+};
+
 // chatFn(messages, tools) -> { text, toolCalls, message }. Injected so tests
 // can use a scripted fake model and never spend credits.
 // image: optional data URL (a timetable, a syllabus, a to-do list photo).
@@ -58,7 +65,8 @@ const MAX_REJECTIONS = 3;  // first try + 2 retries
 // template and pending are only there for a real week: template unlocks the
 // tools that reach past today, pending is a proposal waiting for an answer.
 // councilFn(state) -> { options, agreed } from the two advisors, or null.
-export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false, councilFn = null }) {
+export async function runAgent({ state, userText, chatFn, history = [], image = null, onStep = () => {}, template = null, pending = null, weekday = 0, call = false, councilFn = null, lang = 'en' }) {
+  const said = STOPPED[lang] || STOPPED.en;
   // The agent reads deadline risk from code; it never estimates it.
   const withRadar = (s) => (template ? { ...s, radar: deadlineRadar(template, s, { date: s.date, weekday }) } : s);
   state = withRadar(state);
@@ -122,7 +130,7 @@ ${JSON.stringify(forModel(plan))}`;
           return finish({ reply: noDashes(proposal.message), state, proposal: { ...proposal, message: noDashes(proposal.message) }, trace });
         }
       }
-      return finish({ reply: noDashes(out.text.trim()), state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace });
+      return finish({ reply: noDashes(out.text.trim()) || said.silent, state, proposal: proposal && { ...proposal, message: noDashes(proposal.message) }, trace });
     }
 
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
@@ -163,8 +171,8 @@ ${JSON.stringify(forModel(plan))}`;
     // call would only cost time.
     if (proposal) return finish({ reply: noDashes(proposal.message), state, proposal: { ...proposal, message: noDashes(proposal.message) }, trace });
     if (rejections >= MAX_REJECTIONS) {
-      return finish({ reply: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', state, proposal, trace, stopped: 'rejections' });
+      return finish({ reply: said.rejections, state, proposal, trace, stopped: 'rejections' });
     }
   }
-  return finish({ reply: 'That took too many steps. Here is the plan as it stands.', state, proposal, trace, stopped: 'steps' });
+  return finish({ reply: said.steps, state, proposal, trace, stopped: 'steps' });
 }

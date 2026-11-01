@@ -147,12 +147,14 @@ const pct = (xs, q) => { const s = [...xs].sort((a, b) => a - b); return s.lengt
 const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 const name = (p) => PROVIDERS[p].label.split(' (')[0];
 const groups = [...new Set(CASES.map((c) => c.group))];
-const head = ['| Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn |', '|---|---|---|---|---|---|---|'];
+const head = ['| Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn | Input from cache |', '|---|---|---|---|---|---|---|---|'];
 const summary = providers.map((p) => {
   const rs = results.filter((r) => r.provider === p);
   const usd = (r) => (PRICE[p] ? ((r.use.input - r.use.cached) * PRICE[p].input + r.use.cached * PRICE[p].cached + r.use.output * PRICE[p].output) / 1e6 : 0);
   const cost = PRICE[p] ? `$${(rs.reduce((s, r) => s + usd(r), 0) / rs.length).toFixed(4)}` : 'n/a';
-  return `| ${name(p)} | ${rs.length} | ${rs.filter((r) => r.ok).length}/${rs.length} | ${rs.reduce((s, r) => s + r.broken.length, 0)} | ${secs(pct(rs.map((r) => r.ms), 0.5))} | ${secs(pct(rs.map((r) => r.ms), 0.9))} | ${cost} |`;
+  const tokens = (k) => rs.reduce((s, r) => s + r.use[k], 0);
+  const cache = tokens('cached') ? `${Math.round((100 * tokens('cached')) / tokens('input'))}%` : 'n/a';
+  return `| ${name(p)} | ${rs.length} | ${rs.filter((r) => r.ok).length}/${rs.length} | ${rs.reduce((s, r) => s + r.broken.length, 0)} | ${secs(pct(rs.map((r) => r.ms), 0.5))} | ${secs(pct(rs.map((r) => r.ms), 0.9))} | ${cost} | ${cache} |`;
 });
 const byGroup = ['| Group | Cases | ' + providers.map(name).join(' | ') + ' |', `|---|---|${providers.map(() => '---').join('|')}|`,
   ...groups.map((g) => `| ${g} | ${CASES.filter((c) => c.group === g).length} | ${providers.map((p) => { const rs = results.filter((r) => r.provider === p && r.group === g); return `${rs.filter((r) => r.ok).length}/${rs.length}`; }).join(' | ')} |`)];

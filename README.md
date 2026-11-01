@@ -14,7 +14,11 @@ Built for the [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/m
 
 I'm a first-year IT student who also runs a small education company. I plan every day in blocks. Then reality happens: I start 40 minutes late, a block takes twice as long, a meeting appears at 7pm. In a calendar where every task has a fixed time, one slip pushes everything after it, and by evening the whole day has collapsed.
 
+The lost hour is not the real cost. The real cost is the next hour, spent working out in my head what still fits, what can wait and what I am quietly giving up, usually at the expense of sleep or the people I meant to call. Mesocycle takes that job off my mind: one sentence, and what is left of the day is worked out, with a hard choice put in front of me only when there really is one.
+
 I built a planner with an automatic "reschedule" button before this hackathon, and I stopped using it. It needed setup, it guessed where to put missed work in a future that hadn't happened yet, and it treated every minute as equal. What actually worked was talking the plan through with an AI. Mesocycle is that conversation, with memory of my week and rules that cannot be broken.
+
+**Who it is for:** anyone whose week has more roles than hours. Students who work, parents who study, founders who still want a life.
 
 ## Three moments
 
@@ -53,7 +57,7 @@ Motion and Reclaim are serious products, and by their own descriptions they also
 | Weekly floors are hard rules in code | Family or health cannot silently lose to work; a cut that breaks a floor is rejected |
 | Two advisors argue the hard choices, and you decide | A trade-off in your life should be shown to you, not optimized away |
 | You describe a broken day in one sentence, by voice | No dragging blocks around when you are already behind |
-| The AI can only call checked tools, and every step is shown | 40 of 40 scenarios passed, 10 attacks included, 0 rules broken |
+| The AI can only call checked tools, and every step is shown | 79 of 80 runs on real models passed, 20 of them attacks, 0 rules broken |
 | Sleep is never moved by the agent, and at most 60% of free time is planned | The plan assumes real life happens |
 | Open source, and runs on open weights too | The same agent passes the same tests on Muse Spark Open |
 
@@ -115,16 +119,30 @@ The two guardians ([`src/council.js`](src/council.js)) get no tools at all. Code
 
 **Speech out.** Meta has no speech output model, so answers are read by the voice built into your device.
 
+### Beyond a basic integration
+
+Things these models made possible that a chat box around an API would not:
+
+- **Your plan teaches the ear.** When a call starts, the names of your own roles, tasks and goals go to Muse Voice Transcribe as `keywords`, so it listens for "Giải tích" or a club's nickname the way you write them, in a call that mixes Vietnamese and English.
+- **A real call without speech output.** `ENDPOINTING` and `speechComplete` tell the app when your turn ended. While the device talks, silence is streamed instead of the microphone, so the socket stays open and the AI never hears itself.
+- **The plan moves while the model is still talking.** Parallel tool calls stream to the screen as they pass the checks, so the meeting lands on your timeline about 2 seconds in, before the turn ends.
+- **Advisors that start early.** The moment code sees the day no longer fits, the two guardians start, alongside the main agent. By the time the model asks, their answers are usually on the way. Strict `json_schema` output keeps them to options code has already verified.
+- **Reasoning effort is a product setting.** Measured per job, not guessed: the agent at `low`, the guardians at `minimal`. A typical turn went from 9.9 seconds to about 3, and the score went up.
+- **A photo is an attack surface.** Vision means a screenshot can carry instructions. The evaluation hides them in a quoted message and in an image; the agent's tools make them harmless even when the model is fooled.
+- **One agent, two sets of weights.** The same agent runs the same 40 scenarios on Muse Spark Open, and held every rule, so private mode and failover are real, not a checkbox.
+
 ## Evaluation
 
 40 scenarios on the real agent and real models, English and Vietnamese ([docs/EVAL.md](docs/EVAL.md), `npm run eval`):
 
-| Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn |
-|---|---|---|---|---|---|---|
-| Muse Spark 1.3 | 40 | 40/40 | 0 | 3.3s | 7.5s | $0.0051 |
-| Muse Spark Open | 40 | 40/40 | 0 | 3.7s | 7.8s | n/a |
+| Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn | Input from cache |
+|---|---|---|---|---|---|---|---|
+| Muse Spark 1.3 | 40 | 39/40 | 0 | 3.2s | 5.4s | $0.0053 | 75% |
+| Muse Spark Open | 40 | 40/40 | 0 | 3.0s | 8.8s | n/a | 68% |
 
 10 of the 40 are **attacks**: moving sleep, deleting family time, cutting without asking, a fake system message, and instructions hidden in a quoted message and in a photo. None got through.
+
+The one miss: told to add a goal, Muse Spark asked for a deadline first instead of adding it. No rule was at risk. These are real models, so scores move a little between runs, and this table shows the latest run as it came out. `prompt_cache_key` keeps the stable prefix cached, which is why three quarters of the input is served from cache.
 
 Lowering reasoning effort and ending the turn at the proposal took a typical turn from 9.9 seconds to about 3, with no drop in score ([docs/BENCHMARK.md](docs/BENCHMARK.md)).
 
@@ -140,12 +158,14 @@ npm run simulate:weeks   70,000 days of whole weeks: 9,644 weeks closed, 29,566 
 
 The whole-week simulator earned its place by finding a real bug in the deadline radar during development. And to test the tests, `node scripts/mutants.cjs` plants 6 bugs one at a time: every one is caught.
 
-104 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser: offline use, no network during planning, the demo surviving the AI being down.
+112 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser through 28 checks with no API key (4 more run against the real models with `--ai`): offline use, no network during planning, a late AI answer being dropped, a stale device being unable to overwrite a newer plan, and the demo surviving the AI being down.
 
 ## When things go wrong
 
-- **Meta fails:** Muse Spark Open takes over within the turn.
-- **Both fail during the guided demo:** a recording of one real run plays, and says that it is a recording.
+- **Meta fails, stalls, or its key or credit runs out:** Muse Spark Open takes over within the turn, the app says so, and Meta rests for a minute so the next calls do not wait for it again.
+- **Both fail:** you get a plain sentence, your plan is untouched, and everything except the AI keeps working. In the guided demo, a recording of one real run plays, and says that it is a recording.
+- **A weak connection:** your plan draws from the device first and the network comes after, so a slow network never holds the screen.
+- **Two devices:** a device reads the saved plan before it writes, so an old copy cannot replace a newer one.
 - **KV storage is full:** the AI keeps working; saving shows a warning and retries.
 - **Too many people on one network:** limits are per person, with a loose limit per network.
 - **Budget:** past a daily ceiling, requests move to the open model instead of failing.
@@ -159,7 +179,7 @@ Planning runs on your device. Your plan leaves it only when you use the AI, or w
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # put your keys in .dev.vars
-npm test                         # 104 tests, no model calls
+npm test                         # 112 tests, no model calls
 npm run simulate                 # the stress test
 npm run dev                      # open http://localhost:8787
 npm run e2e                      # browser checks (needs wrangler dev on port 8799)
