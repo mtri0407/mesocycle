@@ -167,7 +167,7 @@ npm run simulate:weeks   70,000 days of whole weeks: 9,644 weeks closed, 29,566 
 
 The whole-week simulator earned its place by finding a real bug in the deadline radar during development. And to test the tests, `node scripts/mutants.cjs` plants 6 bugs one at a time: every one is caught.
 
-112 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser through 28 checks with no API key (4 more run against the real models with `--ai`): offline use, no network during planning, a late AI answer being dropped, a stale device being unable to overwrite a newer plan, and the demo surviving the AI being down.
+112 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser through 29 checks with no API key (4 more run against the real models with `--ai`): offline use, no network during planning, a late AI answer being dropped, a stale device being unable to overwrite a newer plan, and the demo surviving the AI being down.
 
 ## When things go wrong
 
