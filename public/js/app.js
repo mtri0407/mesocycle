@@ -960,7 +960,15 @@ function callPhase(p) {
   $('call-phase').textContent = t(`call_${p}`);
   $('call-stop').hidden = p !== 'speaking';
 }
-function speakOut(text) {
+// Browsers load their voices late: asked too early, the list is empty.
+const voicesReady = () => new Promise((done) => {
+  const synth = window.speechSynthesis;
+  if (!synth || synth.getVoices().length) { done(); return; }
+  synth.addEventListener('voiceschanged', done, { once: true });
+  setTimeout(done, 2000);
+});
+async function speakOut(text) {
+  await voicesReady();
   return new Promise((resolve) => {
     const synth = window.speechSynthesis;
     const want = VI_CHARS.test(text) ? 'vi' : 'en';
