@@ -1,0 +1,11 @@
+# Calls the live app every 30 minutes. A failed run means a model is down.
+name: uptime
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 60 "https://mesocycle.minhtriphamnguyen69.workers.dev/api/health?deep=1"
