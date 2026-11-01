@@ -12,9 +12,15 @@ So a button press runs on the device: instant, offline, and nothing leaves it. A
 public/
   index.html        markup only
   css/app.css
-  js/app.js         screens, accounts, the call, reminders
+  js/app.js         screens, accounts, one turn of the agent, what a new plan means
+  js/voice.js       the microphone button and the hands-free call
+  js/editors.js     hand edits, on a draft copy
+  js/importer.js    a syllabus, a photo or a calendar file in
+  js/reminders.js   push reminders with no content
+  js/picture.js     the week picture to share
   js/strings.js     every word, in English and Vietnamese
   js/audio.js       microphone, WAV, a tone
+  js/dom.js         small helpers
   sw.js             offline shell, push
   core/             pure logic, shared with the Worker
     planner.js      the queue, greedy placement, cuts, debt, learned pace

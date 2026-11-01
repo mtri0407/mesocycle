@@ -1,8 +1,9 @@
 // The app works with no network: its pages and the planning core are kept
 // here, so everything except the AI keeps running.
-const CACHE = 'mesocycle-v6';
+const CACHE = 'mesocycle-v7';
 const CORE = ['planner', 'invariants', 'tools', 'week-tools', 'setup', 'sample', 'demo-state', 'handlers', 'radar', 'diff', 'tradeoff', 'ics'].map((f) => `/core/${f}.js`);
-const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/strings.js', '/js/audio.js', '/icon.svg', '/icon-192.png', '/manifest.webmanifest', '/privacy', '/terms', '/huong-dan', '/core/replay-en.json', '/core/replay-vi.json', '/sample-syllabus.pdf', ...CORE];
+const JS = ['app', 'dom', 'strings', 'audio', 'voice', 'editors', 'importer', 'reminders', 'picture'].map((f) => `/js/${f}.js`);
+const SHELL = ['/', '/css/app.css', ...JS, '/icon.svg', '/icon-192.png', '/manifest.webmanifest', '/privacy', '/terms', '/huong-dan', '/core/replay-en.json', '/core/replay-vi.json', '/sample-syllabus.pdf', ...CORE];
 const PATIENCE_MS = 1500;
 
 self.addEventListener('install', (e) => {

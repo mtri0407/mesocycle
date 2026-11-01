@@ -1,19 +1,20 @@
-// The app: screens, voice and accounts. Planning itself lives in /core.
+// The app: screens and accounts. Planning itself lives in /core, and larger
+// features live in their own files next to this one.
+import { $, esc, store } from '/js/dom.js';
 import { handlers } from '/core/handlers.js';
 import { replan, applyEvent } from '/core/planner.js';
 import { checkPlan } from '/core/invariants.js';
 import { deadlineRadar } from '/core/radar.js';
-import { runWeekTool } from '/core/week-tools.js';
-import { parseIcs } from '/core/ics.js';
 import { T } from '/js/strings.js';
-import { micFrames, beep, toWav } from '/js/audio.js';
 import { planDiff, isEmptyDiff } from '/core/diff.js';
+import { shareWeek } from '/js/picture.js';
+import { setupReminders, setVapidKey, renderRemind, syncReminders } from '/js/reminders.js';
+import { setupEditors, renderEditors, hasDraft, dropDraft } from '/js/editors.js';
+import { setupImport, renderImport, clearImport } from '/js/importer.js';
+import { setupVoice, inCall, micLabels } from '/js/voice.js';
 
 
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
 // Two modes: 'demo' (the author's Friday, demo clock) and 'real' (your week, real time).
 let mode = store.get('meso-mode') || 'demo';
@@ -146,7 +147,7 @@ async function connect() {
     sid && !cloudRead ? getJson('/api/data', authHeaders()) : null,
   ]);
   offline(!config && !saved);
-  if (config?.ok) { configRead = true; googleClientId = config.googleClientId; vapidPublic = config.vapidPublic; }
+  if (config?.ok) { configRead = true; googleClientId = config.googleClientId; setVapidKey(config.vapidPublic); }
   // Only the server saying no ends a session. Being offline does not.
   if (saved?.ok) { cloudRead = true; account = saved.user; await adoptCloud(saved.data); }
   else if (saved?.code === 'auth') signOutLocal();
@@ -185,9 +186,8 @@ function applyLang() {
   $('say').setAttribute('aria-label', t('changed'));
   $('setup-text').setAttribute('aria-label', t('setupTitle'));
   $('fb-text').setAttribute('aria-label', t('feedback'));
-  $('setup-mic').textContent = recorder && micTarget === 'setup' ? t('stop') : t('speak');
+  micLabels();
   $('setup-photo-chip').textContent = t('photoAdded');
-  $('mic').textContent = recorder && micTarget === 'say' ? t('stop') : t('speak');
   renderIntro();
   if (view) { render(); renderExtras(); renderImport(); }
 }
@@ -196,7 +196,7 @@ function renderIntro() {
   // The intro explains the demo, so it stays out of the way once the week is yours.
   $('intro').hidden = mode === 'real' || store.get('meso-intro') === 'hidden';
   if ($('intro').hidden) return;
-  $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button>${ownWeek() ? `<button id="to-week">${t('toWeek')}</button>` : ''}<button class="small" id="hide">${t('hideIntro')}</button></div><div id="captions"></div>`;
+  $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button>${ownWeek() ? `<button id="to-week">${t('toWeek')}</button>` : ''}<button class="small" id="hide">${t('hideIntro')}</button></div>`;
   $('try').onclick = tryDemo;
   $('setup-open').onclick = openSetup;
   $('sample-open').onclick = loadSample;
@@ -281,9 +281,10 @@ function startPlan() {
   chatLog = [];
   pendingProposal = null;
   undoStack.length = 0;
-  draft = null; nextPlan = null; importList = null; reviewOpen = false;
-  $('edit-bar').hidden = true;
-  renderImport();
+  dropDraft();
+  clearImport();
+  nextPlan = null; reviewOpen = false;
+  $('demo-cap').hidden = true;
   renderThread();
   $('answer').innerHTML = ''; $('live-steps').innerHTML = ''; $('status').textContent = '';
 }
@@ -474,7 +475,7 @@ function showTab(name) {
   tab = name;
   store.set('meso-tab', name);
   for (const p of ['today', 'week', 'goals']) $(`p-${p}`).hidden = p !== name;
-  $('call').hidden = name !== 'today' || !!callNow;
+  $('call').hidden = name !== 'today' || inCall();
   document.querySelectorAll('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.tab === name); b.setAttribute('aria-selected', b.dataset.tab === name); });
   window.scrollTo({ top: 0 });
 }
@@ -488,7 +489,7 @@ const hrs = (m) => (Math.round(m / 6) / 10).toString();
 const realDay = () => (mode === 'real' ? today().weekday : 5);
 const realClock = () => mode === 'real' && !template?.sample;
 
-let weekData = null, reviewOpen = false, nextPlan = null, draft = null;
+let weekData = null, reviewOpen = false, nextPlan = null;
 
 // The eight promises, checked after every change, right here on this device.
 function renderPromises() {
@@ -512,7 +513,7 @@ function renderExtras() {
   renderTrend();
   renderSampleBar();
   renderRemind();
-  if (!draft) renderEditors();
+  if (!hasDraft()) renderEditors();
 }
 
 const closedWeek = () => (mode === 'real' && template?.history?.length ? template.history.at(-1) : null);
@@ -580,48 +581,6 @@ async function exitSample() {
   await resetDay('07:00');
 }
 
-// Reminders: the times of today's blocks, sent only when they change.
-let vapidPublic = null, remindKey = '';
-const remindOn = () => store.get('meso-push') === '1';
-function renderRemind() {
-  const btn = $('remind');
-  btn.hidden = !vapidPublic || !('PushManager' in window) || mode !== 'real' || !!template?.sample;
-  btn.textContent = remindOn() ? t('remindOff') : t('remindOn');
-}
-const keyBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-async function syncReminders(force = false) {
-  if (!remindOn() || mode !== 'real' || template?.sample || !view) return;
-  try {
-    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
-    if (!sub) return;
-    const midnight = new Date(logicalNow().d); midnight.setHours(0, 0, 0, 0);
-    const times = [...view.queue, ...view.fixed].map((x) => midnight.getTime() + dayMin(x.start) * 60000).filter((at) => at > Date.now()).sort((a, b) => a - b);
-    const key = JSON.stringify(times);
-    if (key === remindKey && !force) return;
-    remindKey = key;
-    await api('/api/reminders', { endpoint: sub.endpoint, times });
-  } catch { /* reminders are optional */ }
-}
-$('remind').onclick = async () => {
-  const note = $('remind-status');
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    if (remindOn()) {
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) { await api('/api/reminders', { off: true, endpoint: sub.endpoint }); await sub.unsubscribe(); }
-      store.set('meso-push', '');
-      note.textContent = '';
-    } else {
-      if (await Notification.requestPermission() !== 'granted') { note.textContent = t('remindDenied'); return; }
-      await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(vapidPublic) });
-      store.set('meso-push', '1');
-      await syncReminders(true);
-      note.textContent = t('remindSet');
-    }
-    renderRemind();
-  } catch (e) { note.textContent = e.message; }
-};
-
 function renderReview() {
   const box = $('review-card');
   box.hidden = mode !== 'real' || !template;
@@ -647,52 +606,9 @@ function renderReview() {
     return;
   }
   $('next-go').onclick = () => planNext(r);
-  $('share-week').onclick = () => shareWeek(r);
+  $('share-week').onclick = () => shareWeek(r, { t, hrs });
   if (closed) $('review-skip').onclick = () => { template.reviewedWeek = closed.weekStart; saveTemplate(); scheduleSave(); renderExtras(); };
   else $('review-close').onclick = () => { reviewOpen = false; renderReview(); };
-}
-
-// A picture of the week to share. Hours and rules only, never task names.
-async function shareWeek(r) {
-  const size = 1080;
-  const c = Object.assign(document.createElement('canvas'), { width: size, height: size });
-  const g = c.getContext('2d');
-  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const font = (px, weight = 400) => `${weight} ${px}px Inter, system-ui, sans-serif`;
-  g.fillStyle = css('--bg');
-  g.fillRect(0, 0, size, size);
-  g.fillStyle = css('--fg');
-  g.font = font(44, 700);
-  g.fillText('Mesocycle', 80, 120);
-  g.font = font(76, 700);
-  g.fillText(t('recapTitle'), 80, 230);
-  let y = 330;
-  r.roles.slice(0, 6).forEach((x, i) => {
-    const top = Math.max(x.targetMin, x.doneMin, 1);
-    g.fillStyle = css('--fg');
-    g.font = font(36, 500);
-    g.fillText(x.name.slice(0, 26), 80, y);
-    g.fillStyle = css('--muted');
-    g.font = font(32);
-    g.textAlign = 'right';
-    g.fillText(`${hrs(x.doneMin)}h / ${hrs(x.targetMin)}h`, size - 80, y);
-    g.textAlign = 'left';
-    g.fillStyle = css('--chip');
-    g.fillRect(80, y + 20, size - 160, 18);
-    g.fillStyle = css(`--r${i % 8}`);
-    g.fillRect(80, y + 20, (size - 160) * (x.doneMin / top), 18);
-    y += 104;
-  });
-  const kept = r.roles.filter((x) => x.floorMin && x.floorKept).length;
-  const floors = r.roles.filter((x) => x.floorMin).length;
-  g.fillStyle = css('--fg');
-  g.font = font(38, 600);
-  g.fillText(t('recapSleep'), 80, size - 150);
-  if (floors) g.fillText(t('recapFloors')(kept, floors), 80, size - 92);
-  const blob = await new Promise((ok) => c.toBlob(ok, 'image/png'));
-  const file = new File([blob], 'my-week-mesocycle.png', { type: 'image/png' });
-  if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text: t('recapText') }).catch(() => {}); return; }
-  Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: file.name }).click();
 }
 
 async function planNext(review) {
@@ -753,409 +669,6 @@ function renderGoals() {
   ${free.length && goals.length ? `<p class="hint">${t('noGoalRoles')}: ${free.map(esc).join(', ')}</p>` : ''}`;
 }
 
-// Hand edits work on a draft copy. Typing only changes the draft and never
-// redraws the row, so Vietnamese input methods are not interrupted.
-const roleOptions = (d, sel) => d.roles.map((r) => `<option value="${esc(r.id)}" ${r.id === sel ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
-const field = (c, id, f, value, attrs = '') => `<input ${attrs} data-c="${c}" data-i="${esc(id)}" data-f="${f}" value="${esc(value ?? '')}">`;
-
-function renderEditors() {
-  const real = mode === 'real' && !!template;
-  $('import-start').hidden = !real;
-  $('edit-week').hidden = !real;
-  $('edit-goals').hidden = !real;
-  $('week-invite').hidden = real;
-  if (!real) {
-    $('week-invite').innerHTML = `<div class="invite"><p style="margin-top:0">${t('weekInvite')}</p><div class="row" style="justify-content:center"><button class="primary" id="week-invite-sample">${t('sampleBtn')}</button><button id="week-invite-go">${t('setupBtn')}</button></div></div>`;
-    $('week-invite-go').onclick = openSetup;
-    $('week-invite-sample').onclick = loadSample;
-    return;
-  }
-  const d = draft || template;
-  const used = (id) => d.tasks.some((x) => x.roleId === id && x.status === 'todo') || (d.goals || []).some((g) => g.roleId === id);
-  const del = (c, id, off) => `<button class="small icon" data-del="${c}" data-i="${esc(id)}" aria-label="${t('remove')}" title="${off ? t('roleInUse') : t('remove')}" ${off ? 'disabled' : ''}>✕</button>`;
-
-  $('ed-roles').innerHTML = d.roles.map((r) => `<div class="edit-row"><div class="line"><span class="dot" style="${rcStyle(r.id)}"></span>${field('roles', r.id, 'name', r.name, `type="text" aria-label="${t('role')}"`)}${del('roles', r.id, used(r.id))}</div>
-    <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><select data-c="roles" data-i="${esc(r.id)}" data-f="kind" aria-label="${t('role')}"><option value="commitment" ${r.kind !== 'life' ? 'selected' : ''}>${t('kindWork')}</option><option value="life" ${r.kind === 'life' ? 'selected' : ''}>${t('kindLife')}</option></select></div></div>`).join('');
-
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  $('ed-fixed').innerHTML = d.fixed.map((f) => `<div class="edit-row"><div class="line">${field('fixed', f.id, 'title', f.title, `type="text" aria-label="${t('fixed')}"`)}${del('fixed', f.id)}</div>
-    <div class="line">${field('fixed', f.id, 'start', f.start, 'type="time"')} ${field('fixed', f.id, 'end', f.end, 'type="time"')}</div>
-    <div class="line">${order.map((wd) => `<label class="dayp"><input type="checkbox" data-c="fixed" data-i="${esc(f.id)}" data-day="${wd}" ${f.days.includes(wd) ? 'checked' : ''}><span>${t('days')[wd]}</span></label>`).join('')}</div></div>`).join('') || `<p class="hint">${t('noneYet')}</p>`;
-
-  $('ed-tasks').innerHTML = d.tasks.filter((x) => x.status === 'todo').map((x) => `<div class="edit-row"><div class="line">${field('tasks', x.id, 'title', x.title, `type="text" aria-label="${t('task')}"`)}${del('tasks', x.id)}</div>
-    <div class="line"><select data-c="tasks" data-i="${esc(x.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, x.roleId)}</select>
-    <label>${t('minutes')} ${field('tasks', x.id, 'minutes', x.minutes, 'type="number" min="15" max="180" step="5"')}</label>
-    <select data-c="tasks" data-i="${esc(x.id)}" data-f="rank" aria-label="${t('rank')}">${['1', '2', '3', 'extra'].map((v) => `<option value="${v}" ${String(x.rank) === v ? 'selected' : ''}>${v === 'extra' ? t('rankExtra') : `${t('rank')} ${v}`}</option>`).join('')}</select>
-    <label>${t('deadline')} ${field('tasks', x.id, 'deadline', x.deadline, 'type="date"')}</label>${x.debt ? `<span class="chip">${t('debt')}</span>` : ''}</div></div>`).join('') || `<p class="hint">${t('noneYet')}</p>`;
-
-  $('ed-times').innerHTML = `<label>${t('wake')} ${field('root', '', 'wake', d.wake, 'type="time"')}</label> <label>${t('sleepAt')} ${field('root', '', 'sleep', d.sleep, 'type="time"')}</label>`;
-
-  $('ed-goals').innerHTML = (d.goals || []).map((g) => `<div class="edit-row"><div class="line">${field('goals', g.id, 'title', g.title, `type="text" aria-label="${t('goalsTab')}"`)}${del('goals', g.id)}</div>
-    <div class="line"><select data-c="goals" data-i="${esc(g.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, g.roleId)}</select>${field('goals', g.id, 'measure', g.measure, `type="text" placeholder="${t('measure')}" aria-label="${t('measure')}"`)}<label>${t('deadline')} ${field('goals', g.id, 'deadline', g.deadline, 'type="date"')}</label></div></div>`).join('') || `<p class="hint">${t('noGoals')}</p>`;
-}
-
-function startDraft() {
-  if (!draft) draft = JSON.parse(JSON.stringify(template));
-  $('edit-bar').hidden = false;
-  $('edit-status').textContent = '';
-}
-
-function onEditInput(e) {
-  const el = e.target;
-  const { c, i, f, day } = el.dataset;
-  if (!c) return;
-  startDraft();
-  const item = c === 'root' ? draft : draft[c].find((x) => x.id === i);
-  if (day !== undefined) {
-    const wd = Number(day);
-    item.days = el.checked ? [...item.days, wd] : item.days.filter((x) => x !== wd);
-  } else if (f === 'targetMin' || f === 'floorMin') item[f] = Math.round(Number(el.value) * 60);
-  else if (f === 'minutes' || f === 'priority') item[f] = Number(el.value);
-  else if (f === 'rank') item[f] = el.value === 'extra' ? 'extra' : Number(el.value);
-  else if (f === 'deadline') item[f] = el.value || null;
-  else item[f] = el.value;
-}
-
-function onEditClick(e) {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const uid = `e${Date.now().toString(36)}`;
-  if (btn.dataset.del) {
-    startDraft();
-    draft[btn.dataset.del] = draft[btn.dataset.del].filter((x) => x.id !== btn.dataset.i);
-    renderEditors();
-  } else if (btn.dataset.add) {
-    startDraft();
-    const c = btn.dataset.add;
-    const role = draft.roles[0].id;
-    if (c === 'roles') draft.roles.push({ id: uid, name: '', priority: draft.roles.length + 1, targetMin: 120, floorMin: 0 });
-    if (c === 'fixed') draft.fixed.push({ id: uid, title: '', days: [realDay()], start: '08:00', end: '09:00' });
-    if (c === 'tasks') draft.tasks.push({ id: uid, title: '', roleId: role, minutes: 60, rank: 2, deadline: null, status: 'todo' });
-    if (c === 'goals') (draft.goals = draft.goals || []).push({ id: uid, title: '', roleId: role, measure: '', deadline: null });
-    renderEditors();
-  }
-}
-for (const box of ['edit-week', 'edit-goals']) {
-  $(box).addEventListener('input', onEditInput);
-  $(box).addEventListener('change', onEditInput);
-  $(box).addEventListener('click', onEditClick);
-}
-
-$('edit-save').onclick = async () => {
-  $('edit-save').disabled = true;
-  $('edit-status').textContent = t('saving');
-  try {
-    const data = await api('/api/edit', { template: draft, state, weekday: realDay(), lang });
-    template = draft; draft = null;
-    saveTemplate();
-    $('edit-bar').hidden = true;
-    $('edit-status').textContent = '';
-    apply(data);
-  } catch (e) {
-    $('edit-status').textContent = e.message;
-  } finally {
-    $('edit-save').disabled = false;
-  }
-};
-$('edit-cancel').onclick = () => { draft = null; $('edit-bar').hidden = true; renderEditors(); };
-
-// Syllabus or photo in, dated items out. Nothing joins the plan until ticked.
-let importList = null;
-const readAsDataUrl = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
-async function importDoc(file, name) {
-  // A calendar file is read right here: nothing leaves the device.
-  if (/\.ics$/i.test(name) || file.type === 'text/calendar') {
-    const items = parseIcs(await file.text(), state.date);
-    $('import-status').textContent = items.length ? '' : t('importEmpty');
-    if (items.length) { importList = items.map((x) => ({ ...x, keep: true })); renderImport(); }
-    return;
-  }
-  if (!(await askConsent())) return;
-  const note = $('import-status');
-  note.textContent = t('importing');
-  $('import-open').disabled = $('import-sample').disabled = true;
-  const mine = run;
-  try {
-    const data = file.type === 'application/pdf' ? await readAsDataUrl(file) : await shrink(file);
-    const out = await api('/api/import', { file: data, name, date: state.date, lang, provider: provider() });
-    if (mine !== run) return;
-    if (!out.deadlines.length && !out.events.length) { note.textContent = t('importEmpty'); return; }
-    note.textContent = '';
-    importList = [
-      ...out.deadlines.map((d) => ({ ...d, kind: 'deadline', keep: true })),
-      ...out.events.map((e) => ({ ...e, kind: 'event', keep: true })),
-    ];
-    renderImport();
-  } catch (e) {
-    note.textContent = e.code === 'private-pdf' ? t('importPrivate') : e.message;
-  } finally {
-    $('import-open').disabled = $('import-sample').disabled = false;
-  }
-}
-function renderImport() {
-  const box = $('import-card');
-  box.hidden = !importList;
-  if (!importList) return;
-  const shortDate = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
-  box.innerHTML = `<h2>${t('importTitle')}</h2><p class="hint" style="margin-top:0">${t('importHint')}</p>
-    ${importList.map((x, i) => `<label class="pick"><input type="checkbox" data-i="${i}" ${x.keep ? 'checked' : ''}><span><b>${esc(x.title)}</b><br><span class="hint">${x.kind === 'weekly' ? `${x.days.map((d) => t('days')[d]).join(', ')}, ${x.start} - ${x.end}` : ''}${x.kind === 'weekly' ? '' : shortDate(x.date)}${x.kind === 'weekly' ? '' : x.kind === 'event' ? `, ${x.start} - ${x.end}` : `, ${t('importEstimate')(hrs(x.minutes))}`}</span></span></label>`).join('')}
-    <div class="row" style="margin-top:10px"><label style="font-size:14px">${t('role')} <select id="import-role">${template.roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></label></div>
-    <div class="row" style="margin-top:10px"><button class="primary" id="import-add"></button><button id="import-no">${t('cancel')}</button></div>`;
-  const count = () => { $('import-add').textContent = t('importAdd')(importList.filter((x) => x.keep).length); };
-  box.querySelectorAll('input[type=checkbox]').forEach((c) => { c.onchange = () => { importList[Number(c.dataset.i)].keep = c.checked; count(); }; });
-  count();
-  $('import-no').onclick = () => { importList = null; renderImport(); };
-  $('import-add').onclick = addImported;
-}
-// Big work becomes blocks of two hours, all due on the same date.
-async function addImported() {
-  const roleId = $('import-role').value;
-  const day = { today: state.date };
-  let next = template;
-  const addOne = (name, args) => { const r = runWeekTool(next, name, args, day); if (r.ok) next = r.template; };
-  for (const x of importList.filter((i) => i.keep)) {
-    if (x.kind === 'weekly') {
-      addOne('add_event', { title: x.title, start: x.start, minutes: toMin(x.end) - toMin(x.start), days: x.days });
-      continue;
-    }
-    if (x.kind === 'event') {
-      if (x.date > state.date) addOne('add_event', { title: x.title, start: x.start, minutes: toMin(x.end) - toMin(x.start), date: x.date });
-      continue;
-    }
-    const blocks = Math.ceil(x.minutes / 120);
-    for (let i = 1; i <= blocks; i++) {
-      addOne('add_task', { title: blocks > 1 ? `${x.title} (${i}/${blocks})` : x.title, role: roleId, minutes: Math.max(15, Math.round(x.minutes / blocks)), rank: i === 1 ? '1' : '2', deadline: x.date });
-    }
-  }
-  undoStack.push(snapshot());
-  importList = null;
-  renderImport();
-  apply(await api('/api/edit', { template: next, state, weekday: realDay(), lang }));
-  $('import-status').textContent = t('importDone');
-  showTab('today');
-}
-$('import-open').onclick = () => $('doc-file').click();
-$('doc-file').onchange = () => {
-  const file = $('doc-file').files[0];
-  $('doc-file').value = '';
-  if (file) importDoc(file, file.name);
-};
-$('import-sample').onclick = async () => importDoc(await fetch('/sample-syllabus.pdf').then((r) => r.blob()), 'sample-syllabus.pdf');
-
-// Voice check-in: record, convert to 16 kHz mono WAV (what the
-// transcription API accepts), transcribe, then send the text to the agent.
-let recorder = null, micTarget = 'say';
-$('mic').onclick = () => startMic('say');
-$('setup-mic').onclick = () => startMic('setup');
-async function startMic(target) {
-  if (recorder) { recorder.stop(); return; }
-  if (!(await askConsent())) return;
-  micTarget = target;
-  const btn = target === 'setup' ? $('setup-mic') : $('mic');
-  const status = target === 'setup' ? $('setup-status') : $('status');
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { status.textContent = t('noMic'); return; }
-  const chunks = [];
-  const live = startLive(stream, status);
-  recorder = new MediaRecorder(stream);
-  recorder.ondataavailable = (e) => chunks.push(e.data);
-  recorder.onstop = async () => {
-    recorder = null;
-    btn.textContent = t('speak');
-    status.textContent = t('transcribing');
-    const heard = await live.finish();
-    stream.getTracks().forEach((tr) => tr.stop());
-    if (heard) {
-      status.textContent = '';
-      if (target === 'setup') $('setup-text').value = ($('setup-text').value + ' ' + heard).trim();
-      else { $('say').value = heard; send(); }
-      return;
-    }
-    try {
-      const wav = await toWav(new Blob(chunks));
-      const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav', 'X-Visitor': visitorId }, body: wav });
-      const data = await res.json().catch(() => ({}));
-      if (!data.ok) throw new Error(errMsg(data));
-      if (!data.text) { status.textContent = t('notCaught'); return; }
-      if (target === 'setup') { $('setup-text').value = ($('setup-text').value + ' ' + data.text).trim(); status.textContent = ''; }
-      else { $('say').value = data.text; send(); }
-    } catch (e) { status.textContent = e.message; }
-  };
-  recorder.start();
-  btn.textContent = t('stop');
-  status.textContent = t('listening');
-}
-
-const voiceUrl = (q = '') => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice?v=${visitorId}${q}`;
-
-// Shows words as they come. finish() resolves with the text, or '' if live
-// voice did not work, in which case the recording is transcribed the old
-// way and nothing is lost.
-function startLive(stream, status) {
-  let finals = '', partial = '', failed = false, closed;
-  const whenClosed = new Promise((r) => { closed = r; });
-  let ws, stopMic;
-  const early = []; // the connection takes about a second; the first words wait for it
-  try {
-    ws = new WebSocket(voiceUrl());
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = () => early.splice(0).forEach((b) => ws.send(b));
-    ws.onmessage = ({ data }) => {
-      const m = JSON.parse(data);
-      if (m.type === 'error') { failed = true; return; }
-      if (m.type !== 'transcript') return;
-      if (m.final) { finals = `${finals} ${m.text}`.trim(); partial = ''; } else partial = m.text;
-      status.textContent = `${finals} ${partial}`.trim() || t('listening');
-    };
-    ws.onerror = () => { failed = true; };
-    ws.onclose = () => closed();
-    stopMic = micFrames(stream, (frame) => {
-      if (ws.readyState === 0) early.push(frame);
-      else if (ws.readyState === 1) ws.send(frame);
-    });
-  } catch { failed = true; closed(); }
-  return {
-    async finish() {
-      stopMic?.();
-      if (ws?.readyState === 1) ws.send('{"type":"endStream"}'); else closed();
-      await Promise.race([whenClosed, new Promise((r) => setTimeout(r, 5000))]);
-      try { ws?.close(); } catch {}
-      return failed ? '' : `${finals} ${partial}`.trim();
-    },
-  };
-}
-
-// AI call: the model hears when a sentence ends, the agent acts through
-// the same checked tools, and the device reads the answer aloud. Meta has
-// no speech output yet, so the voice is the browser's own. While the AI
-// works or talks, silence is sent instead of the mic, so it never hears
-// itself; the stream must keep flowing or the server closes it.
-let callNow = null;
-const SILENCE = new Int16Array(2048).buffer;
-// Words from this plan, so names are heard the way they are written.
-const planWords = () => [...new Set([...view.roles.map((r) => r.name), ...state.queue.map((q) => q.title), ...(template?.goals || []).map((g) => g.title)])].slice(0, 40);
-const VI_CHARS = /[đăâêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
-function callPhase(p) {
-  if (!callNow) return;
-  callNow.phase = p;
-  $('call-phase').textContent = t(`call_${p}`);
-  $('call-stop').hidden = p !== 'speaking';
-}
-// Browsers load their voices late: asked too early, the list is empty.
-const voicesReady = () => new Promise((done) => {
-  const synth = window.speechSynthesis;
-  if (!synth || synth.getVoices().length) { done(); return; }
-  synth.addEventListener('voiceschanged', done, { once: true });
-  setTimeout(done, 2000);
-});
-async function speakOut(text, call) {
-  await voicesReady();
-  if (callNow !== call) return undefined; // ended while the voices were loading
-  return new Promise((resolve) => {
-    const synth = window.speechSynthesis;
-    const want = VI_CHARS.test(text) ? 'vi' : 'en';
-    const voice = synth?.getVoices().find((v) => v.lang.toLowerCase().startsWith(want));
-    if (!voice) { $('call-note').textContent = t('noVoice'); setTimeout(resolve, Math.min(5000, 1000 + text.length * 40)); return; }
-    const u = new SpeechSynthesisUtterance(text);
-    u.voice = voice;
-    u.lang = voice.lang;
-    const guard = setTimeout(resolve, 4000 + text.length * 150); // some browsers never fire onend
-    u.onend = u.onerror = () => { clearTimeout(guard); resolve(); };
-    synth.cancel();
-    synth.speak(u);
-  });
-}
-function spokenAnswer(done) {
-  const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
-  const p = done.proposal;
-  // Spoken: the reason, not seven task names. The names are on the screen.
-  const name = (o) => (t('guardian')[o.by] || '').replace(/^\S+\s/, '');
-  const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${name(o) ? `, ${name(o)}` : ''}: ${o.why || o.ids.map(title).slice(0, 3).join(', ')}.`).join(' ') : '';
-  return `${done.reply || p?.message || ''} ${options}${p ? ` ${t('whichOne')}` : ''}`.trim();
-}
-async function callTurn(text) {
-  const me = callNow;
-  callPhase('thinking');
-  $('call-live').textContent = text;
-  $('call-reply').textContent = '';
-  const done = await send(text, null, { call: true });
-  if (callNow !== me) return;
-  const line = done ? spokenAnswer(done) : $('status').textContent || t('errNet');
-  $('call-reply').textContent = line;
-  callPhase('speaking');
-  await speakOut(line, me);
-  if (callNow !== me) return;
-  me.heard = Date.now();
-  callPhase('listening');
-}
-// When voice cannot run, the plain way is always there.
-function typeInstead(message) {
-  $('status').textContent = message;
-  $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  $('say').focus();
-}
-async function startCall() {
-  if (callNow || $('call').disabled) return;
-  $('call').disabled = true; // the permission prompt can take a while
-  // Browsers only allow speech that starts from a tap, so it starts here.
-  window.speechSynthesis?.getVoices();
-  window.speechSynthesis?.speak(new SpeechSynthesisUtterance(''));
-  let stream = null;
-  if (await askConsent()) {
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch { typeInstead(t('noMic')); }
-  }
-  $('call').disabled = false;
-  if (!stream) return;
-  showTab('today');
-  count('call');
-  $('call').hidden = true;
-  const ws = new WebSocket(voiceUrl('&call=1'));
-  ws.binaryType = 'arraybuffer';
-  const me = { ws, stream, phase: 'speaking', stopMic: null, heard: Date.now(), lock: null };
-  callNow = me;
-  navigator.wakeLock?.request('screen').then((l) => { if (callNow === me) me.lock = l; else l.release(); }).catch(() => {});
-  ws.onopen = () => ws.send(JSON.stringify({ keywords: planWords() }));
-  $('call-box').hidden = false;
-  $('call-live').textContent = ''; $('call-reply').textContent = ''; $('call-note').textContent = '';
-  callPhase('speaking');
-  ws.onmessage = ({ data }) => {
-    const m = JSON.parse(data);
-    if (callNow !== me || me.phase !== 'listening') return;
-    if (m.type === 'transcript' && m.text) { $('call-live').textContent = m.text; me.heard = Date.now(); }
-    if (m.type === 'turn' && m.text.trim()) { beep(); callTurn(m.text.trim()); }
-  };
-  // Only this call: the socket of an older one can close late.
-  ws.onclose = () => { if (callNow === me) { endCall(); typeInstead(t('callLost')); } };
-  me.stopMic = micFrames(stream, (frame) => {
-    if (ws.readyState === 1) ws.send(me.phase === 'listening' ? frame : SILENCE);
-  });
-  await speakOut(t('callHello'), me);
-  if (callNow !== me) return; // ended during the greeting
-  callPhase('listening');
-  // A forgotten call must not keep the microphone open.
-  me.idle = setInterval(() => {
-    if (callNow === me && me.phase === 'listening' && Date.now() - me.heard > 90000) endCall();
-  }, 5000);
-}
-function endCall() {
-  if (!callNow) return;
-  const { ws, stream, stopMic, lock, idle } = callNow;
-  callNow = null;
-  clearInterval(idle);
-  lock?.release().catch(() => {});
-  $('call').hidden = false;
-  stopMic?.();
-  stream.getTracks().forEach((tr) => tr.stop());
-  try { ws.close(); } catch {}
-  window.speechSynthesis?.cancel();
-  $('call-box').hidden = true;
-}
-$('call').onclick = startCall;
-$('call-end').onclick = endCall;
-$('call-stop').onclick = () => window.speechSynthesis?.cancel();
-
 // Photo: shrink it in the browser, then hand it to the agent (Muse Spark reads images).
 let photoTarget = 'say';
 $('photo').onclick = () => { photoTarget = 'say'; $('photo-file').click(); };
@@ -1189,12 +702,12 @@ const syncPrivate = () => { $('private').checked = provider() === 'open'; $('pri
 $('private').onchange = () => { store.set('meso-private', $('private').checked ? '1' : ''); syncPrivate(); };
 syncPrivate();
 
-// Asked once, before the first thing leaves for an AI provider.
 // Earlier turns of the conversation; the latest answer sits below them.
 function renderThread() {
   $('thread').innerHTML = chatLog.slice(0, -2).slice(-6).map((m) => `<div class="turn ${m.role === 'user' ? 'me' : 'ai'}">${esc(m.content)}</div>`).join('');
 }
 
+// Asked once, before the first thing leaves for an AI provider.
 function askConsent() {
   if (consented()) return Promise.resolve(true);
   const box = $('consent-sheet');
@@ -1265,7 +778,7 @@ async function send(textArg, image = null, opts = {}) {
     pendingProposal = done.proposal || null;
     $('say').value = '';
     showAnswer(done);
-    $('status').textContent = `${((Date.now() - started) / 1000).toFixed(1)}s${done.fellBack ? ` · ${t('fellBack')}` : ''}`;
+    $('status').textContent = `${t('took')(((Date.now() - started) / 1000).toFixed(1))}${done.fellBack ? ` · ${t('fellBack')}` : ''}`;
     return done;
   } catch (e) {
     if (ctl !== sendCtl) return null; // the plan moved on, and this answer with it
@@ -1346,6 +859,8 @@ function showAnswer(data) {
       <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
     `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
       <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
+  // The answer is the point of the turn, so it comes to the person.
+  $('answer').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if ($('undo')) $('undo').onclick = undo;
   if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
     b.onclick = async () => {
@@ -1356,6 +871,7 @@ function showAnswer(data) {
       draw();
       pendingProposal = null;
       count('approve');
+      if (!$('demo-cap').hidden) caption('cap4');
       $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p><button class="small" id="undo">${t('undo')}</button>`;
       $('undo').onclick = undo;
     };
@@ -1395,18 +911,19 @@ async function playRecording() {
 }
 
 // Guided demo: a broken afternoon, with a caption for each step.
+function caption(k) { $('demo-cap').textContent = t(k); $('demo-cap').hidden = false; }
 async function tryDemo() {
-  const cap = (k) => $('captions').insertAdjacentHTML('beforeend', `<p class="caption">${t(k)}</p>`);
-  $('captions').innerHTML = '';
   await resetDay('17:00');
   const mine = run; // pressing Reset or Try again takes over from here
-  cap('cap1');
-  $('say').value = t('demoText');
-  cap('cap2');
+  caption('cap1');
   $('say').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await new Promise((r) => { setTimeout(r, 2200); }); // time to read it
+  if (mine !== run) return;
+  $('say').value = t('demoText');
+  caption('cap2');
   const live = await send(undefined, null, { demo: true });
   if (mine === run && !live) await playRecording();
-  if (mine === run) cap('cap3');
+  if (mine === run) caption('cap3');
 }
 
 function openSetup() {
@@ -1456,7 +973,7 @@ async function tick() {
   if (mode !== 'real' || !state || template?.sample || sendCtl) return;
   const d = today();
   if (state.date !== d.date && template) {
-    if (callNow || draft) return; // the new day can wait for the end of a call or an edit
+    if (inCall() || hasDraft()) return; // the new day can wait for the end of a call or an edit
     startPlan();
     await newDay(state);
     if (started) morningCheckin();
@@ -1513,6 +1030,18 @@ $('fb-send').onclick = async () => {
   try { await api('/api/feedback', { text, lang, rating: fbRating, quote: $('fb-quote').checked }); $('fb-text').value = ''; $('fb-quote').checked = false; fbRating = null; renderStars(); $('fb-status').textContent = t('thanks'); }
   catch (e) { $('fb-status').textContent = e.message; }
 };
+
+// What the feature files may read and use. They change the plan only through
+// these functions, so the rules of a new plan stay in one place.
+const shared = {
+  t, api, apply, send, askConsent, showTab, count, errMsg, hrs, rcStyle, realDay, dayMin, logicalNow, shrink, provider, visitorId, openSetup, loadSample,
+  snapshotForUndo: () => undoStack.push(snapshot()),
+  get mode() { return mode; }, get template() { return template; }, get state() { return state; }, get view() { return view; }, get lang() { return lang; }, get run() { return run; },
+};
+setupReminders(shared);
+setupEditors(shared);
+setupImport(shared);
+setupVoice(shared);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 // A failure nobody planned for still says something, and says the plan is safe.

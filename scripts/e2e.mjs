@@ -198,6 +198,22 @@ await check('the guided demo survives the AI being down: a labelled recording pl
   await p.context().close();
 });
 
+await check('the guided demo talks from a bar that stays on screen, and brings the answer into view', async () => {
+  const p = await open();
+  await p.route('**/api/agent', (r) => r.abort());
+  await p.click('#try');
+  await p.waitForSelector('#demo-cap:not([hidden])');
+  assert.match(await p.textContent('#demo-cap'), /5pm/);
+  await p.waitForSelector('[data-opt="0"]', { timeout: 20000 });
+  await p.waitForFunction(() => /Two advisors/.test(document.getElementById('demo-cap').textContent));
+  await p.waitForTimeout(900);
+  const top = await p.evaluate(() => document.getElementById('answer').getBoundingClientRect().top);
+  assert.ok(top >= 0 && top < 400, `answer at ${top}`);
+  await p.click('[data-opt="0"]');
+  await p.waitForFunction(() => /Call AI/.test(document.getElementById('demo-cap').textContent));
+  await p.context().close();
+});
+
 await check('a deadline that cannot be met shows at once, with a way to act', async () => {
   const p = await open();
   await p.click('#sample-open');

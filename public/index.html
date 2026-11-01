@@ -24,8 +24,14 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/app.css">
   <link rel="modulepreload" href="/js/app.js">
+  <link rel="modulepreload" href="/js/dom.js">
   <link rel="modulepreload" href="/js/strings.js">
   <link rel="modulepreload" href="/js/audio.js">
+  <link rel="modulepreload" href="/js/voice.js">
+  <link rel="modulepreload" href="/js/editors.js">
+  <link rel="modulepreload" href="/js/importer.js">
+  <link rel="modulepreload" href="/js/reminders.js">
+  <link rel="modulepreload" href="/js/picture.js">
   <link rel="modulepreload" href="/core/handlers.js">
   <link rel="modulepreload" href="/core/planner.js">
   <link rel="modulepreload" href="/core/invariants.js">
@@ -56,6 +62,7 @@
   </header>
   <main>
     <div id="p-today">
+    <div class="caption" id="demo-cap" role="status" hidden></div>
     <section class="card caption" id="offline-bar" hidden data-t="offlineNote" style="margin:0 0 14px"></section>
     <section class="card caption" id="sample-bar" hidden style="margin:0 0 14px"></section>
     <section class="card caption" id="week-banner" hidden style="margin:0 0 14px"></section>

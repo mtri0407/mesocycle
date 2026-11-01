@@ -10,6 +10,15 @@ Built for the [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/m
 
 *A mesocycle is a planned block of weeks, built around how you really recover. This is that, for your life.*
 
+## For judges, in five minutes
+
+| Criterion | Where to look |
+|---|---|
+| **Impact** | [The problem](#the-problem) is my own week. Press *Try it in 60 seconds*, then *Set up my week* and describe yours. |
+| **Use of Meta AI** | Press **Call AI** and talk. Then read [Beyond a basic integration](#beyond-a-basic-integration). |
+| **Technical depth** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/EVAL.md](docs/EVAL.md), and `npm test` and `npm run simulate`, which need no API key. |
+| **Demo** | The link above works with no sign-in, on a phone or a laptop. If the AI cannot answer during the guided demo, a labelled recording plays. |
+
 ## The problem
 
 I'm a first-year IT student who also runs a small education company. I plan every day in blocks. Then reality happens: I start 40 minutes late, a block takes twice as long, a meeting appears at 7pm. In a calendar where every task has a fixed time, one slip pushes everything after it, and by evening the whole day has collapsed.
