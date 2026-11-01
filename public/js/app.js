@@ -123,7 +123,8 @@ async function initAccount() {
   try { const c = await api('/api/config'); googleClientId = c.googleClientId; vapidPublic = c.vapidPublic; offline(false); } catch { offline(true); }
   if (sid) {
     const r = await fetch('/api/data', { headers: authHeaders() }).then((x) => x.json()).catch(() => null);
-    if (r && r.ok) { account = r.user; useCloud(r.data); } else signOutLocal();
+    // Only the server saying no ends a session. Being offline does not.
+    if (r?.ok) { account = r.user; useCloud(r.data); } else if (r?.code === 'auth') signOutLocal();
   }
   renderConsent();
   renderAccount();
@@ -221,6 +222,15 @@ async function loadWeek() {
 
 async function resetDay(time = '07:00') {
   apply(await api(`/api/demo?now=${time}&lang=${lang}`));
+  clearChat();
+}
+
+// A new day or a new plan starts a new conversation: an old proposal no longer applies.
+function clearChat() {
+  chatLog = [];
+  pendingProposal = null;
+  undoStack.length = 0;
+  renderThread();
   $('answer').innerHTML = ''; $('live-steps').innerHTML = ''; $('status').textContent = '';
 }
 
@@ -488,6 +498,7 @@ async function loadSample() {
   // A week the person already has is kept aside, not overwritten.
   if (template && !template.sample) store.set('meso-own', JSON.stringify(template));
   setMode('real');
+  clearChat();
   apply(await api('/api/sample', { ...today(), lang }));
   showTab('today');
 }
@@ -1036,6 +1047,7 @@ async function startCall() {
     if (ws.readyState === 1) ws.send(callNow?.phase === 'listening' ? frame : SILENCE);
   });
   await speakOut(t('callHello'));
+  if (!callNow) return; // ended during the greeting
   callPhase('listening');
   // A forgotten call must not keep the microphone open.
   callNow.idle = setInterval(() => {
@@ -1305,7 +1317,7 @@ $('setup-go').onclick = async () => {
     setMode('real');
     if (!sid) $('setup-status').textContent = t('signedOut');
     $('setup').hidden = true; setupImage = null; $('setup-photo-chip').hidden = true; $('setup-text').value = '';
-    $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
+    clearChat();
     apply(data);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
@@ -1319,7 +1331,7 @@ $('setup-go').onclick = async () => {
 async function tick() {
   if (mode !== 'real' || !state || template?.sample || $('send').disabled) return;
   const d = today();
-  if (state.date !== d.date && template) { apply(await api('/api/day', { template, state, ...d, now: realNow() })); morningCheckin(); return; }
+  if (state.date !== d.date && template) { clearChat(); apply(await api('/api/day', { template, state, ...d, now: realNow() })); morningCheckin(); return; }
   if (realNow() > state.now) { state.now = realNow(); await refresh(); }
 }
 setInterval(tick, 60000);

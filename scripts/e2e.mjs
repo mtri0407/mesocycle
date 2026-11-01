@@ -208,6 +208,29 @@ await check('finishing everything offers one more block from the backlog', async
   await p.context().close();
 });
 
+await check('resetting the demo clears the old conversation and proposal', async () => {
+  const p = await open();
+  await p.route('**/api/agent', (r) => r.abort());
+  await p.click('#try');
+  await p.waitForSelector('[data-opt="0"]', { timeout: 20000 });
+  await p.click('#demo-box summary');
+  await p.click('#reset');
+  await p.waitForFunction(() => !document.querySelector('[data-opt="0"]'));
+  assert.equal(await p.textContent('#answer'), '');
+  await p.context().close();
+});
+
+await check('opening offline keeps you signed in', async () => {
+  const p = await open({ sw: 'block', seed: { 'meso-sid': 'a'.repeat(64) } });
+  await p.route('**/api/data', (r) => r.abort());
+  await p.evaluate((sid) => localStorage.setItem('meso-sid', sid), 'a'.repeat(64));
+  await p.reload();
+  await p.waitForSelector('#now-card .now-title');
+  await p.waitForTimeout(500);
+  assert.equal(await p.evaluate(() => localStorage.getItem('meso-sid')), 'a'.repeat(64));
+  await p.context().close();
+});
+
 await check('first screen: the demo is one tap away, with no sign-in and no age question', async () => {
   const p = await open();
   assert.ok(await p.locator('#try').isVisible());

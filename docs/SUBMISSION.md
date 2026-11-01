@@ -33,7 +33,7 @@ I'm a first-year IT student running a small education company, and I built this 
 
 The model never edits the plan. It calls tools, code validates every call and returns the reason when it refuses, so the agent corrects itself. The planning core is one set of files that runs in the browser and in the Worker: buttons are instant and work offline, and the same code judges the model. Every answer carries a receipt computed by code. Deadline risk is computed, and the agent must read it, so it cannot simply reassure you.
 
-Evaluation on real models: 40 scenarios, English and Vietnamese, 40/40 on both models, 0 rules broken, median 3.3 seconds, about half a cent a turn. 10 of the 40 are attacks, including instructions hidden in a photo; none got through. Stress tests: 100,000 broken days and 70,000 days of whole weeks, 0 broken promises, and 6 of 6 planted bugs caught. 104 unit tests and 17 browser checks. Tuning reasoning effort took a typical turn from 9.9 seconds to about 3 with no loss in score.
+Evaluation on real models: 40 scenarios, English and Vietnamese, 40/40 on both models, 0 rules broken, median 3.3 seconds, about half a cent a turn. 10 of the 40 are attacks, including instructions hidden in a photo; none got through. Stress tests: 100,000 broken days and 70,000 days of whole weeks, 0 broken promises, and 6 of 6 planted bugs caught. 104 unit tests and 19 browser checks. Tuning reasoning effort took a typical turn from 9.9 seconds to about 3 with no loss in score.
 
 **What's new in this hackathon**
 
