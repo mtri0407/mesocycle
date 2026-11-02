@@ -508,6 +508,167 @@ await check('a calendar file is read on the device, with nothing sent', async ()
   await p.context().close();
 });
 
+await check('focus: the timer gives real minutes, the log keeps them, stopping early shortens the block', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ seed });
+  const first = await p.textContent('.now-title');
+  await p.click('[data-act=focus]');
+  await p.waitForSelector('#now-card .focus-time');
+  await p.clock.setFixedTime(new Date('2026-11-03T10:25:00+07:00'));
+  await p.click('[data-act=done]');
+  await p.waitForFunction((f) => document.querySelector('.now-title').textContent !== f, first);
+  const t = await local(p, 'meso-template');
+  assert.equal(t.log.at(-1).minutes, 25);
+  assert.equal(t.actuals.at(-1).actual, 25, 'the planner learns from the real minutes');
+  const id = (await local(p, 'meso-state')).queue.find((q) => q.status === 'todo').id;
+  await p.click('[data-act=focus]');
+  await p.clock.setFixedTime(new Date('2026-11-03T10:35:00+07:00'));
+  await p.click('[data-act=stop]');
+  await p.waitForFunction((i) => JSON.parse(localStorage.getItem('meso-state')).queue.find((q) => q.id === i).spent === 10, id);
+  assert.equal((await local(p, 'meso-template')).log.length, 2);
+  await p.click('[data-tab=week]');
+  await p.waitForSelector('#log-card:not([hidden]) .sess');
+  assert.match(await p.textContent('#log-card'), /real focus/);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('a forgotten timer asks when you really stopped', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ seed });
+  await p.click('[data-act=focus]');
+  await p.clock.setFixedTime(new Date('2026-11-03T13:00:00+07:00'));
+  await p.click('[data-act=done]');
+  await p.waitForSelector('#focus-check[open]');
+  await p.fill('#focus-end', '10:40');
+  await p.click('#focus-use');
+  await p.waitForFunction(() => (JSON.parse(localStorage.getItem('meso-template')).log || []).length === 1);
+  assert.equal((await local(p, 'meso-template')).log[0].minutes, 40);
+  await p.context().close();
+});
+
+await check('phases: added by hand, checked like any edit, and one covering this week sets the hours', async () => {
+  const { t, seed } = await realWeek();
+  const p = await open({ seed });
+  await p.click('[data-tab=goals]');
+  await p.click('summary[data-t=editGoals]');
+  await p.locator('[data-add=phases]').first().click();
+  const row = p.locator('#ed-goals .edit-row.sub').first();
+  await row.locator('input[type=text]').first().fill('Foundations');
+  await row.locator('input[type=number]').fill('20');
+  await row.locator('input[type=date]').nth(1).fill('2026-11-01');
+  await row.locator('input[type=date]').nth(1).dispatchEvent('change');
+  await p.click('#edit-save');
+  await p.waitForFunction(() => /end after it starts/.test(document.getElementById('edit-status').textContent));
+  await row.locator('input[type=date]').nth(1).fill('2026-11-29');
+  await row.locator('input[type=date]').nth(1).dispatchEvent('change');
+  await p.click('#edit-save');
+  await p.waitForFunction(() => document.getElementById('edit-bar').hidden);
+  const after = await local(p, 'meso-template');
+  const goal = after.goals[0];
+  assert.equal(goal.phases[0].applied, '2026-11-02');
+  assert.equal(after.roles.find((r) => r.id === goal.roleId).targetMin, Math.max(1200, t.roles.find((r) => r.id === goal.roleId).floorMin));
+  await p.waitForSelector('#goals-card .ph.now');
+  assert.match(await p.textContent('#goals-card'), /week 1 of 4/);
+  await p.context().close();
+});
+
+await check('Muse Spark phases are a draft: nothing changes until approved', async () => {
+  const { seed } = await realWeek();
+  const p = await open({ seed });
+  const draft = [{ id: 'x1', title: 'Base', start: '2026-11-03', end: '2026-11-23', weeklyMin: 1200, expect: 'All units reviewed' }, { id: 'x2', title: 'Practice', start: '2026-11-24', end: '2026-12-14', weeklyMin: 1320, expect: 'Two papers above 80%' }];
+  let sent = null;
+  await p.route('**/api/phases', (r) => { sent = r.request().postDataJSON(); return r.fulfill({ json: { ok: true, phases: draft } }); });
+  await p.click('[data-tab=goals]');
+  await p.locator('[data-ph-ai]').first().click();
+  await p.waitForSelector('[data-ph-use]');
+  assert.ok(sent.goalId && sent.template);
+  assert.equal((await local(p, 'meso-template')).goals[0].phases, undefined);
+  await p.click('[data-ph-use]');
+  await p.waitForFunction(() => (JSON.parse(localStorage.getItem('meso-template')).goals[0].phases || []).length === 2);
+  await p.context().close();
+});
+
+await check('a phase that ended asks how it went, once', async () => {
+  const { t, s } = await realWeek();
+  t.goals[0].phases = [{ id: 'old', title: 'Warm up', start: '2026-10-01', end: '2026-10-31', weeklyMin: null, expect: 'Habit in place' }];
+  const p = await open({ seed: { 'meso-template': JSON.stringify(t), 'meso-state': JSON.stringify(s), 'meso-mode': 'real', ...CONSENT } });
+  await p.click('[data-tab=goals]');
+  await p.click('[data-ph-retro$="|reached"]');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-template')).goals[0].phases[0].retro?.verdict === 'reached');
+  assert.equal(await p.locator('[data-ph-retro]').count(), 0);
+  await p.context().close();
+});
+
+const GREYSTEEL = JSON.stringify({
+  schemaVersion: 2,
+  goals: [{ id: 'gpa', title: 'GPA', rank: 1, timeBudgetMinPerWeek: 900 }, { id: 'gym', title: 'Gym', rank: 2, timeBudgetMinPerWeek: 240 },
+    { id: 'ielts', title: 'IELTS 7.0', unit: 'band', startValue: 5, targetValue: 7, targetDate: '2027-06-01', rank: null, timeBudgetMinPerWeek: null, phases: [{ id: 'p', name: 'Base', startDate: '2026-11-02', endDate: '2026-11-30', expectedValue: 5.5, weeklyTarget: 5, weeklyUnit: 'giờ' }] }],
+  blockTemplates: [{ id: 'a', weekday: 2, start: '13:00', end: '15:00', type: 'flexible', goalId: 'gpa', label: 'Study' }, { id: 'b', weekday: 2, start: '06:00', end: '08:00', type: 'fixed', goalId: 'gpa', label: 'Calculus class' }],
+  tasks: [], focusSessions: [{ id: 'f', goalId: 'gpa', startedAt: '2026-11-02T09:00:00+07:00', endedAt: '2026-11-02T09:45:00+07:00', minutes: 45 }],
+  notes: [{ id: 'n', content: 'private' }],
+});
+
+await check('a Greysteel Tasks file is read on the device and becomes the week', async () => {
+  const p = await open();
+  await p.click('#setup-open');
+  p.apiCalls.length = 0;
+  await p.setInputFiles('#doc-file', { name: 'greysteel-tasks-data.json', mimeType: 'application/json', buffer: Buffer.from('{"not":"it"}') });
+  await p.waitForFunction(() => /not a Greysteel/.test(document.getElementById('import-status').textContent));
+  await p.setInputFiles('#doc-file', { name: 'greysteel-tasks-data.json', mimeType: 'application/json', buffer: Buffer.from(GREYSTEEL) });
+  await p.waitForSelector('#gs-use');
+  assert.match(await p.textContent('#import-card'), /3 roles/);
+  await p.click('#gs-use');
+  await p.waitForFunction(() => localStorage.getItem('meso-mode') === 'real');
+  const t = await local(p, 'meso-template');
+  assert.equal(t.imported.from, 'Greysteel Tasks');
+  assert.deepEqual(t.roles.map((r) => r.name), ['GPA', 'Gym', 'IELTS 7.0']);
+  assert.ok(t.updatedAt, 'moving a week in counts as an edit');
+  assert.equal(t.log.length, 1);
+  assert.ok(!JSON.stringify(t).includes('private'));
+  assert.deepEqual(p.apiCalls.filter((a) => !['/api/config', '/api/data', '/api/checkin'].includes(a)), []);
+  await p.waitForSelector('#now-card .now-title');
+  await p.context().close();
+});
+
+await check('the tour walks through the screen and can be skipped', async () => {
+  const p = await open();
+  await p.click('#tour-open');
+  await p.waitForSelector('.tour-card');
+  assert.match(await p.textContent('.tour-card'), /1 of/);
+  await p.click('#tour-next');
+  await p.waitForFunction(() => /2 of/.test(document.querySelector('.tour-card').textContent));
+  await p.click('#tour-skip');
+  assert.ok(await p.locator('#tour').isHidden());
+  await p.context().close();
+});
+
+await check('on the demo a suggestion goes out at once, with no consent question', async () => {
+  const p = await open();
+  let sent = null;
+  await p.route('**/api/agent', (r) => { sent = r.request().postDataJSON(); return answer(r, { state: sent.state }); });
+  await p.locator('#chips button').first().click();
+  await p.waitForFunction(() => document.querySelector('#answer .reply'));
+  assert.ok(!(await p.locator('#consent-sheet').evaluate((d) => d.open)));
+  assert.match(sent.text, /overslept/);
+  assert.equal(await p.locator('#chips button').count(), 0, 'suggestions step aside once a conversation starts');
+  await p.context().close();
+});
+
+await check('layout: no sideways scroll on a laptop or a tablet, in every tab', async () => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1000, height: 800 }]) {
+    const p = await open({ viewport });
+    await p.click('#sample-open');
+    await p.waitForSelector('#sample-bar:not([hidden])');
+    for (const tab of ['today', 'week', 'goals']) {
+      await p.click(`[data-tab=${tab}]`);
+      assert.equal(await overflow(p), 0, `${viewport.width} ${tab}`);
+    }
+    assert.deepEqual(p.errors, []);
+    await p.context().close();
+  }
+});
+
 if (AI) {
   await check('AI: a sample syllabus becomes a list to approve, then real deadlines', async () => {
     const p = await open();

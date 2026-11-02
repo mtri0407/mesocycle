@@ -2,6 +2,7 @@
 // text, optionally a timetable photo). Muse Spark answers with one build_week
 // tool call; code checks it and builds today's plan from it.
 import { replan, toMin, freeWindows, sleepMinutes, sleepIsValid, learnPace, adjustEstimate } from './planner.js';
+import { applyPhases, phaseErrors } from './phases.js';
 
 export const SETUP_PROMPT = `You turn a person's description of their week into a plan template
 by calling build_week exactly once.
@@ -330,10 +331,12 @@ export function rollover(template, prevState, { date, weekday, now }) {
   let t = prevState && prevState.date !== date ? absorbDay(template, prevState) : template;
   const week = mondayOf(date);
   let review = null;
-  if (!t.weekStart) t = { ...t, weekStart: week };
+  if (!t.weekStart) t = applyPhases({ ...t, weekStart: week }, week);
   else if (t.weekStart !== week) {
     t = closeWeek(t, week);
     review = t.history.at(-1);
+    // A phase that begins sets its hours; a next week the person approved wins.
+    t = applyPhases(t, week);
     if (t.pending) t = adoptNext(t, t.pending);
   }
   return { template: t, state: buildDay(t, { date, weekday, now }), review };
@@ -474,6 +477,7 @@ export function checkTemplate(t, lang = 'en') {
     if (!String(g.title || '').trim()) errors.push(m('Every goal needs a title.', 'Mục tiêu nào cũng cần tên.'));
     if (!ids.has(g.roleId)) errors.push(m(`${g.title}: that role no longer exists.`, `${g.title}: vai trò này không còn.`));
   }
+  errors.push(...phaseErrors(t, lang));
   return errors;
 }
 

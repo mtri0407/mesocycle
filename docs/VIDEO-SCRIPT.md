@@ -1,4 +1,4 @@
-# Kịch bản video demo 3 phút (bản 5, chờ Trí duyệt)
+# Kịch bản video demo 3 phút (bản 6, chờ Trí duyệt)
 
 Lời thoại tiếng Anh (Trí đọc). Ghi chú quay tiếng Việt. Luật cuộc thi: phải chỉ rõ phần làm mới trong hackathon (câu ở 0:15 và 2:50). Không cần lộ mặt. Quay trên live.
 
@@ -17,7 +17,7 @@ Bốn tiêu chí chấm chính thức, và đoạn nào ăn điểm tiêu chí n
 | 0:15 tới 0:25 | Màn đầu của app | "So during this hackathon I built Mesocycle from scratch, on Meta's Muse models." |
 | 0:25 tới 1:15 | **Cuộc gọi, quay một mạch, không cắt.** Điện thoại trong tay. Bấm Call AI: "I slept through the afternoon, and there's a class meeting at 7pm." Dòng thời gian trượt. Hai thẻ hiện ra. Nói "option 2". | Để tiếng thật của cuộc gọi. Sau đó nói: "That was not sped up. The meeting landed in two seconds. Then two advisors weighed it at the same time: one defends my exams, one defends my life. Nothing moved until I chose, and I chose out loud." |
 | 1:15 tới 1:35 | Tab Goals, bấm Try a sample syllabus, danh sách hiện ra, tích, Add. Dải cảnh báo nếu có hạn thiếu giờ | "I drop in a syllabus. Muse Spark finds every date, I approve what stays, and the radar works out, in code, which deadline is in trouble." |
-| 1:35 tới 1:55 | Tab Week: biểu đồ, Review this week, Plan next week, bảng giờ cũ và mới kèm lý do | "Each week closes itself. Muse Spark proposes next week from what really happened, and code rejects anything that drops a weekly minimum or overfills the week." |
+| 1:35 tới 1:55 | Tab Goals: bấm Plan phases with Muse Spark, ba giai đoạn hiện ra, bấm Use. Rồi tab Week: nhật ký tập trung, Plan next week | "A goal becomes phases, blocks of a few weeks: that is what a mesocycle is. Muse Spark drafts them, code checks every date and every hour. Each week closes itself, and the focus timer means the plan learns from real minutes." |
 | 1:55 tới 2:20 | Biên lai dưới câu trả lời, huy hiệu 8 of 8, bấm Undo. Tắt mạng, bấm Done vẫn chạy | "The model never edits my plan. It calls tools, and code checks every call. Every answer comes with a receipt written by code, and I can undo anything. Planning runs on my phone, so it keeps working with no connection." |
 | 2:20 tới 2:45 | Sơ đồ kiến trúc, rồi bảng kết quả trong README, dòng 10 attacks | "I tested it on forty real scenarios, ten of them attacks: fake system messages, instructions hidden in a photo. Zero rules broken, on Muse Spark and on open-weight Muse Spark Open, which also takes over if Meta goes down." |
 | 2:45 tới 3:00 | Số người dùng thật và một câu trích dẫn được phép (nếu có). Link | "[Số thật từ usage-report]. Mesocycle protects your deadlines and your life, not the clock. Everything here was built during the hackathon; the history starts October 27." |

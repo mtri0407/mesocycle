@@ -43,16 +43,19 @@ I built a planner with an automatic "reschedule" button before this hackathon, a
 |---|---|
 | **Set up your week in a minute** | Describe it in your own words, typed or spoken, English or Vietnamese. Add a photo of your timetable. |
 | **Follow one card: Now** | Done, need 15 more minutes, or can't do it. The rest of the day slides on an animated timeline. |
+| **Focus, and log real time** | Press Focus and a timer counts up. Done records the real minutes, so estimates learn from what happened; Stop shortens what is left. The Week tab keeps a focus log by day. |
 | **Call the agent** | It adds work with a deadline, one-time and weekly events and goals, remembers the conversation, and takes "option 2" as your answer. |
 | **Add a syllabus** | Drop a PDF or a photo. Muse Spark finds every date, you tick what to keep, and the radar shows which deadline is in trouble. |
 | **Bring your calendar** | Add an `.ics` file from any calendar app. It is read on your device, and you choose what to keep. |
 | **See deadlines coming** | The radar works out, in code, which deadlines can still be met and how many hours are missing. The agent has to read it, so it cannot just say "you'll be fine". |
 | **Connect it to your goals** | Goals link to the roles that serve them, show the hours they got this week, and warn when they fall behind pace. |
+| **Plan a goal in phases** | A mesocycle, literally: split a goal into blocks of a few weeks, each with a focus, hours a week and a result to check. Muse Spark drafts them, code checks dates, minimums and the deadline, and nothing applies until you approve. When a phase begins its hours become the role's target; when it ends, the app asks how it went. |
 | **Close the loop every week** | A new week closes the old one: plan against reality, debt carried over. Muse Spark proposes next week's hours with a reason for each. Nothing applies until you approve it. |
 | **Trust it** | Undo anything the AI changed. Edit anything by hand. Estimates learn how long things really take you, and say so. |
 | **Share your week** | A picture of your hours and kept minimums, never your task names. |
 | **Keep going offline** | Planning runs on your device, so everything except the AI works with no connection. |
 | **Choose where your words go** | *More private* runs on Muse Spark Open through Baseten instead of Meta. |
+| **Learn it in 30 seconds** | *Take the tour* points at each part of the screen with one sentence each. |
 
 Not ready to set up? *See a sample week* shows goals, history and the trend chart in seconds.
 
@@ -66,7 +69,7 @@ Motion and Reclaim are serious products, and by their own descriptions they also
 | Weekly floors are hard rules in code | Family or health cannot silently lose to work; a cut that breaks a floor is rejected |
 | Two advisors argue the hard choices, and you decide | A trade-off in your life should be shown to you, not optimized away |
 | You describe a broken day in one sentence, by voice | No dragging blocks around when you are already behind |
-| The AI can only call checked tools, and every step is shown | 79 of 80 runs on real models passed, 20 of them attacks, 0 rules broken |
+| The AI can only call checked tools, and every step is shown | 240 of 240 runs on real models passed, 60 of them attacks, 0 rules broken |
 | Sleep is never moved by the agent, and at most 60% of free time is planned | The plan assumes real life happens |
 | Open source, and runs on open weights too | The same agent passes the same tests on Muse Spark Open |
 
@@ -123,6 +126,7 @@ The two guardians ([`src/council.js`](src/council.js)) get no tools at all. Code
 | Reading a timetable or a message | `muse-spark-1.3`, or Muse Spark Open in private mode | Image understanding |
 | Reading a syllabus | `muse-spark-1.3` | PDF input with strict `json_schema` output |
 | Next week's proposal, morning check-in | `muse-spark-1.3` | Checked tool call; read-only summary |
+| A goal in phases | `muse-spark-1.3`, or Muse Spark Open in private mode | Checked tool call: phases must follow each other from today, stay above the weekly minimum, fit the week and end by the deadline; a refused draft goes back with the reasons |
 
 **Why two models.** Not for show. Baseten states it does not keep or train on these requests, which is the honest reason for a private mode. And if Meta fails, Muse Spark Open answers within the same turn, so one outage does not stop the app.
 
@@ -142,16 +146,16 @@ Things these models made possible that a chat box around an API would not:
 
 ## Evaluation
 
-40 scenarios on the real agent and real models, English and Vietnamese ([docs/EVAL.md](docs/EVAL.md), `npm run eval`):
+40 scenarios on the real agent and real models, English and Vietnamese, each run 3 times on each model ([docs/EVAL.md](docs/EVAL.md), `npm run eval`):
 
 | Model | Runs | Passed | Rules broken | Median | 90th percentile | Cost per turn | Input from cache |
 |---|---|---|---|---|---|---|---|
-| Muse Spark 1.3 | 40 | 39/40 | 0 | 3.2s | 5.4s | $0.0053 | 75% |
-| Muse Spark Open | 40 | 40/40 | 0 | 3.0s | 8.8s | n/a | 68% |
+| Muse Spark 1.3 | 120 | 120/120 | 0 | 3.4s | 6.4s | $0.0048 | 84% |
+| Muse Spark Open | 120 | 120/120 | 0 | 3.3s | 10.2s | n/a | 86% |
 
 10 of the 40 are **attacks**: moving sleep, deleting family time, cutting without asking, a fake system message, and instructions hidden in a quoted message and in a photo. None got through.
 
-The one miss: told to add a goal, Muse Spark asked for a deadline first instead of adding it. No rule was at risk. These are real models, so scores move a little between runs, and this table shows the latest run as it came out. `prompt_cache_key` keeps the stable prefix cached, which is why three quarters of the input is served from cache.
+An earlier single run had one miss: told to add a goal, Muse Spark asked for a deadline first instead of adding it, with no rule at risk. One sentence in the `add_goal` tool description (deadline and measure are optional, do not ask) fixed it, and the three runs above came after. `prompt_cache_key` keeps the stable prefix cached, which is why more than four fifths of the input is served from cache.
 
 Lowering reasoning effort and ending the turn at the proposal took a typical turn from 9.9 seconds to about 3, with no drop in score ([docs/BENCHMARK.md](docs/BENCHMARK.md)).
 
@@ -167,7 +171,7 @@ npm run simulate:weeks   70,000 days of whole weeks: 9,644 weeks closed, 29,566 
 
 The whole-week simulator earned its place by finding a real bug in the deadline radar during development. And to test the tests, `node scripts/mutants.cjs` plants 6 bugs one at a time: every one is caught.
 
-112 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser through 29 checks with no API key (4 more run against the real models with `--ai`): offline use, no network during planning, a late AI answer being dropped, a stale device being unable to overwrite a newer plan, and the demo surviving the AI being down.
+131 unit tests run with no model calls (`npm test`), and `npm run e2e` drives a real browser through 39 checks with no API key (4 more run against the real models with `--ai`): offline use, no network during planning, a late AI answer being dropped, a stale device being unable to overwrite a newer plan, and the demo surviving the AI being down.
 
 ## When things go wrong
 
@@ -188,7 +192,7 @@ Planning runs on your device. Your plan leaves it only when you use the AI, or w
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # put your keys in .dev.vars
-npm test                         # 112 tests, no model calls
+npm test                         # 131 tests, no model calls
 npm run simulate                 # the stress test
 npm run dev                      # open http://localhost:8787
 npm run e2e                      # browser checks (needs wrangler dev on port 8799)
@@ -202,7 +206,9 @@ Mesocycle is a time-planning tool. It gives no medical, mental health, nutrition
 
 ## Built during the hackathon
 
-Everything in this repository was written during the hackathon (first commit: October 27, 2026); the daily history is in the commits and in `docs/dev-notes/`. My earlier planner app was not reused; Mesocycle is new code, designed from what that app taught me.
+Everything in this repository was written during the hackathon (first commit: October 27, 2026); the daily history is in the commits and in `docs/dev-notes/`. My earlier planner app, Greysteel Tasks, was not reused as code; Mesocycle is new code, designed from what that app taught me. Three of its ideas were rewritten for Mesocycle during the hackathon, on Mesocycle's own core: goals in phases, a focus timer with a log of real minutes, and an in-app tour. Mesocycle can also read that app's data file on the device, so I can move my own week across.
+
+The look follows the design language of Meta AI's apps (a chat-first page, big type, one blue). Mesocycle is not affiliated with or endorsed by Meta.
 
 AI coding assistants were used during development. The product decisions, the rules (taken from how I actually plan my exam weeks), testing with my real week, and the demo are my own.
 

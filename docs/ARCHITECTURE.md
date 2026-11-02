@@ -18,6 +18,9 @@ public/
   js/importer.js    a syllabus, a photo or a calendar file in
   js/reminders.js   push reminders with no content
   js/picture.js     the week picture to share
+  js/focus.js       the focus timer on the Now card, and the focus log
+  js/phases-ui.js   phases on the Goals tab, and Muse Spark's drafts
+  js/tour.js        the in-app tour
   js/strings.js     every word, in English and Vietnamese
   js/audio.js       microphone, WAV, a tone
   js/dom.js         small helpers
@@ -27,6 +30,8 @@ public/
     invariants.js   the 8 promises as checks
     tools.js        today's tools, each validating its input
     week-tools.js   tools past today: they can only add
+    phases.js       a goal in phases: checks, hours when a phase begins, progress
+    greysteel.js    reads a Greysteel Tasks data file into a week, on the device
     setup.js        weeks: fair daily share, new days, closing a week, hand edits
     radar.js        can each deadline still be met?
     tradeoff.js     which cuts are valid
@@ -109,6 +114,8 @@ Times measured on the live app for this scenario: the plan changes after about 2
 **The plan draws before the network.** The first screen comes from the device. Accounts and the saved copy load after it, with a time limit, so a bad connection slows nothing that does not need one.
 
 **A device reads before it writes.** Until the saved copy has been read, nothing is sent. An old phone coming back online cannot replace what a laptop saved in the meantime.
+
+**A phase sets hours once.** When a phase begins, its hours become the weekly target of the goal's role, and the phase is marked. A target the person changes afterwards stays theirs, and a next week the person approved wins over a phase starting the same week.
 
 **A new day is not an edit.** Rolling over keeps the time of the last real change. Otherwise simply opening an old device each morning would make its copy look newest.
 

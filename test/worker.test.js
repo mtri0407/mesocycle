@@ -106,6 +106,22 @@ test('when no provider answers, the person gets a sentence, not provider details
   assert.ok(!JSON.stringify(data).includes('provider detail'));
 });
 
+test('phases from the model are checked, refused ones go back with the reasons', async () => {
+  const { sampleWeek } = await import('../public/core/sample.js');
+  const template = sampleWeek({ date: '2026-11-03', weekday: 2, lang: 'en' });
+  const goal = template.goals[0];
+  const floor = template.roles.find((r) => r.id === goal.roleId).floorMin / 60;
+  const phases = [{ title: 'Base', start: '2026-11-03', end: '2026-11-23', weeklyHours: floor + 1, expect: 'All units reviewed' }];
+  const post = () => worker.fetch(new Request('http://x/api/phases', { method: 'POST', body: JSON.stringify({ template, goalId: goal.id, date: '2026-11-03', lang: 'en' }) }), { FEEDBACK: fakeKv({}), MODEL_API_KEY: 'a', BASETEN_API_KEY: 'b' }, {});
+  const { asked, out } = await withModel([toolCall('plan_phases', { phases: [{ ...phases[0], start: '2026-11-10' }] }), toolCall('plan_phases', { phases })], post);
+  const data = await out.json();
+  assert.equal(out.status, 200);
+  assert.equal(data.phases[0].weeklyMin, (floor + 1) * 60);
+  assert.match(asked[1].messages.at(-1).content, /start today/);
+  const missing = await worker.fetch(new Request('http://x/api/phases', { method: 'POST', body: JSON.stringify({ template, goalId: 'nope', date: '2026-11-03' }) }), { FEEDBACK: fakeKv({}), MODEL_API_KEY: 'a' }, {});
+  assert.equal(missing.status, 400);
+});
+
 test('a PDF is never sent to a provider that cannot read it', async () => {
   const body = JSON.stringify({ file: 'data:application/pdf;base64,AAAA', date: '2026-11-01' });
   const { asked, out } = await withModel([503], () => worker.fetch(new Request('http://x/api/import', { method: 'POST', body }), { FEEDBACK: fakeKv({}), MODEL_API_KEY: 'a', BASETEN_API_KEY: 'b' }, {}));

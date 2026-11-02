@@ -6,6 +6,8 @@ import { applyEvent, replan, toHHMM } from './planner.js';
 import { demoState } from './demo-state.js';
 import { buildDay, forecastWeek, rollover, rebaseDay, adoptNext, goalPace, weekReview, checkTemplate, pullNext } from './setup.js';
 import { sampleWeek } from './sample.js';
+import { applyPhases } from './phases.js';
+import { mondayOf } from './setup.js';
 
 export const view = (state) => runTool(state, 'get_state', {}).result;
 
@@ -47,8 +49,19 @@ export const handlers = {
     const edited = next ? adoptNext(template, next) : template;
     const errors = checkTemplate(edited, lang);
     if (errors.length) return { ok: false, error: errors[0], errors };
-    const updated = rebaseDay(edited, state, { weekday });
-    return { ok: true, template: edited, state: updated, view: view(updated) };
+    // A phase covering this week starts now, so today already follows it.
+    const week = state.date ? applyPhases(edited, mondayOf(state.date)) : edited;
+    const updated = rebaseDay(week, state, { weekday });
+    return { ok: true, template: week, state: updated, view: view(updated) };
+  },
+
+  // Focus stopped before the work was finished: what is left gets shorter.
+  // The clock is not moved; on a real day it already moved while working.
+  '/api/progress': ({ state, id, minutes }) => {
+    const item = state.queue.find((q) => q.id === id && q.status === 'todo');
+    if (!item || !(minutes >= 1)) return { ok: true, state, view: view(state) };
+    const next = { ...applyEvent(state, { type: 'work', id, minutes: Math.round(minutes), finished: false }), now: state.now };
+    return { ok: true, state: next, view: view(next) };
   },
 
   // Finished early: one more block from the backlog.

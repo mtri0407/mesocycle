@@ -7,9 +7,9 @@
   <meta name="description" content="Mesocycle là gì và cách dùng trong 5 phút.">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <style>
-    :root { --bg: #f5f6f8; --fg: #15181d; --muted: #5d6573; --card: #fff; --line: #e3e6eb; --accent: #2457d6; --accent-fg: #fff; --tip: #f0f5ff; }
+    :root { --bg: #ffffff; --fg: #1c2b33; --muted: #5d6c7b; --card: #fff; --line: #e4e7eb; --accent: #0064e0; --accent-fg: #fff; --tip: #f2f7ff; }
     @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) { --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --line: #2a2f38; --accent: #6f95ff; --accent-fg: #0f1115; --tip: #1a2233; }
+      :root:not([data-theme="light"]) { --bg: #0f1115; --fg: #e8eaee; --muted: #9aa3b2; --card: #181b21; --line: #2a2f38; --accent: #3d8bff; --accent-fg: #fff; --tip: #13202f; }
     }
     * { box-sizing: border-box; }
     body { margin: 0; font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
@@ -17,11 +17,11 @@
     h1 { font-size: 26px; margin: 0 0 6px; }
     h2 { font-size: 19px; margin: 28px 0 8px; }
     .lead { color: var(--muted); margin: 0 0 18px; }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px; margin: 10px 0; }
     .tip { background: var(--tip); }
     ol, ul { padding-left: 20px; margin: 6px 0; }
     li { margin: 4px 0; }
-    a.btn { display: inline-block; background: var(--accent); color: var(--accent-fg); text-decoration: none; padding: 10px 16px; border-radius: 10px; font-weight: 600; }
+    a.btn { display: inline-block; background: var(--accent); color: var(--accent-fg); text-decoration: none; padding: 10px 18px; border-radius: 999px; font-weight: 600; }
     .muted { color: var(--muted); font-size: 14px; }
     b.k { background: var(--tip); padding: 0 6px; border-radius: 6px; font-weight: 600; }
   </style>
@@ -53,8 +53,8 @@
         <li>Bấm <b class="k">✨ Lập tuần của tôi</b>. Kể về tuần của bạn bằng lời của bạn, gõ hoặc bấm 🎙 để nói. Ví dụ:
           <p class="muted" style="margin:6px 0">"Sinh viên năm hai. Học 18 tiếng một tuần, không dưới 10. Làm thêm 10 tiếng. Gym 3 buổi. Gọi về nhà 2 lần. Thứ 2 và thứ 4 học 7h đến 11h. Thi cuối kỳ 20/12. Dậy 7h, ngủ 23h30."</p>
           Có ảnh thời khoá biểu thì bấm 📷 thêm vào. Bấm <b class="k">Lập tuần</b>, chờ khoảng 15 đến 20 giây.</li>
-        <li>Xem thẻ <b class="k">Bây giờ</b>: chỉ một việc cần làm ngay. Làm xong bấm <b class="k">Xong</b>, cần thêm thời gian bấm <b class="k">Cần thêm 15 phút</b>, không làm được bấm <b class="k">Không làm được</b>.</li>
-        <li>Có gì thay đổi thì nói hoặc gõ vào ô <b class="k">Có gì thay đổi?</b>, ví dụ "7 giờ tối có họp nhóm 1 tiếng". Nếu phải bỏ bớt việc, app sẽ <b>hỏi bạn trước</b> và đưa 2 phương án.</li>
+        <li>Xem thẻ <b class="k">Bây giờ</b>: chỉ một việc cần làm ngay. Làm xong bấm <b class="k">Xong</b>, cần thêm thời gian bấm <b class="k">Cần thêm 15 phút</b>, không làm được bấm <b class="k">Không làm được</b>. Muốn đo giờ thật thì bấm <b class="k">▶ Tập trung</b> trước khi làm: đồng hồ chạy, bấm Xong là app ghi đúng số phút bạn đã làm.</li>
+        <li>Có gì thay đổi thì nói hoặc gõ vào ô hỏi lớn, ví dụ "7 giờ tối có họp nhóm 1 tiếng", rồi bấm mũi tên hoặc Enter. Bên dưới có sẵn vài câu gợi ý, bấm là gửi. Nếu phải bỏ bớt việc, app sẽ <b>hỏi bạn trước</b> và đưa 2 phương án.</li>
         <li>Lỡ quá giờ mà chưa bấm Xong, app sẽ tự hỏi có muốn xếp lại không.</li>
       </ol>
     </div>
@@ -63,15 +63,15 @@
     <div class="card">
       <ul>
         <li><b class="k">Hôm nay</b>: việc cần làm ngay, dòng thời gian trong ngày, và ô báo thay đổi.</li>
-        <li><b class="k">Tuần</b>: giờ từng vai trò so với mức tối thiểu, dự kiến các ngày còn lại, tổng kết tuần. Ở đây bạn cũng sửa trực tiếp vai trò, lịch cố định, việc cần làm, giờ dậy và giờ ngủ. Sửa giữa ngày thì việc đã xong, nợ và những gì agent vừa thêm vẫn được giữ.</li>
-        <li><b class="k">Mục tiêu</b>: điều bạn đang theo đuổi (GPA, doanh thu, kỳ thi...), vai trò nào phục vụ nó, tuần này đã đóng góp bao nhiêu giờ. Mục tiêu nào đang tụt nhịp, app sẽ báo.</li>
+        <li><b class="k">Tuần</b>: giờ từng vai trò so với mức tối thiểu, <b>nhật ký tập trung</b> (số phút thật theo từng ngày, bấm ✕ để xoá phiên ghi nhầm), dự kiến các ngày còn lại, tổng kết tuần. Ở đây bạn cũng sửa trực tiếp vai trò, lịch cố định, việc cần làm, giờ dậy và giờ ngủ. Sửa giữa ngày thì việc đã xong, nợ và những gì agent vừa thêm vẫn được giữ.</li>
+        <li><b class="k">Mục tiêu</b>: điều bạn đang theo đuổi (GPA, doanh thu, kỳ thi...), vai trò nào phục vụ nó, tuần này đã đóng góp bao nhiêu giờ. Mục tiêu nào đang tụt nhịp, app sẽ báo. Mỗi mục tiêu chia được thành <b>giai đoạn</b>: khối vài tuần có một trọng tâm, số giờ mỗi tuần và kết quả kỳ vọng. Bấm <b class="k">✨ Lập giai đoạn với Muse Spark</b> để AI đề xuất, hoặc thêm tay trong <b>Sửa mục tiêu</b>. Khi giai đoạn bắt đầu, số giờ của nó thành mục tiêu tuần của vai trò; khi kết thúc, app hỏi bạn kết quả thế nào.</li>
       </ul>
       <p class="muted" style="margin:6px 0 0">Sang tuần mới, app tự lưu tuần cũ và giữ lại nợ. Bấm <b class="k">Lập tuần tới</b> để AI đề xuất giờ mới theo những gì đã thật sự diễn ra. Không có gì thay đổi cho tới khi bạn bấm Đồng ý, và AI không được đổi mục tiêu, lịch cố định, giờ ngủ hay mức tối thiểu.</p>
     </div>
 
     <h2>Gọi AI</h2>
     <div class="card">
-      <p style="margin:0">Bấm <b class="k">📞 Gọi AI</b> ở ô "Có gì thay đổi?" rồi nói bình thường, không cần bấm gì thêm. Ví dụ: "thứ 5 nộp báo cáo, cần 2 tiếng", "tối nay có họp 7 giờ", "thêm mục tiêu GPA 3.6". Khi phải bỏ bớt việc, hai tác tử Người giữ hạn chót và Người giữ cuộc sống mỗi bên đưa một cách kèm lý do, và bạn trả lời "chọn cách 2". Xong bấm <b class="k">Kết thúc</b>. Giọng đọc là giọng có sẵn trên máy; máy không có giọng tiếng Việt thì câu trả lời hiện bằng chữ.</p>
+      <p style="margin:0">Bấm nút xanh <b class="k">Gọi AI</b> ở góc dưới bên phải rồi nói bình thường, không cần bấm gì thêm. Ví dụ: "thứ 5 nộp báo cáo, cần 2 tiếng", "tối nay có họp 7 giờ", "thêm mục tiêu GPA 3.6". Khi phải bỏ bớt việc, hai tác tử Người giữ hạn chót và Người giữ cuộc sống mỗi bên đưa một cách kèm lý do, và bạn trả lời "chọn cách 2". Xong bấm <b class="k">Kết thúc</b>. Giọng đọc là giọng có sẵn trên máy; máy không có giọng tiếng Việt thì câu trả lời hiện bằng chữ.</p>
     </div>
 
     <h2>Mẹo dùng</h2>
@@ -83,6 +83,8 @@
         <li>Có đề cương hay lịch thi: vào tab <b>Mục tiêu</b>, bấm <b>📎 Thêm tệp</b>. AI tìm các mốc, bạn tích chọn rồi mới thêm.</li>
         <li>Bật <b>🔒 Riêng tư hơn</b> để chạy trên Muse Spark Open. Giọng nói vẫn đi qua Meta.</li>
         <li>Muốn xem trước khi tự lập: bấm <b>👀 Xem tuần mẫu</b>. Đây là tuần dựng sẵn, không lưu gì.</li>
+        <li>Lần đầu dùng: bấm <b>🧭 Xem tour</b> để được chỉ từng phần trên màn hình, mất khoảng 30 giây.</li>
+        <li>Đang dùng Greysteel Tasks: trong <b>Lập tuần của tôi</b> bấm <b>Chuyển từ Greysteel Tasks</b> và chọn tệp dữ liệu của nó. Tệp được đọc ngay trên máy bạn, không gửi đi đâu; ghi chú và danh sách người thân trong tệp không được đọc.</li>
         <li>Bấm <b>🔔 Bật nhắc việc</b> ở cuối tab Hôm nay để nhận thông báo khi tới giờ. Trên iPhone cần thêm app vào màn hình chính trước.</li>
         <li>Nói tiếng Việt hay tiếng Anh đều được. Nút <b>VI/EN</b> ở góc trên đổi ngôn ngữ giao diện.</li>
       </ul>
@@ -105,7 +107,8 @@
     </div>
 
     <p style="margin-top:24px"><a class="btn" href="/">Mở Mesocycle</a></p>
-    <p class="muted">Mesocycle là dự án mã nguồn mở, làm cho Meta Global AI Developer Hackathon. Chạy trên các model Muse của Meta.</p>
+    <p class="muted">Mesocycle là dự án mã nguồn mở, làm cho Meta Global AI Developer Hackathon 2026. Chạy trên các model Muse của Meta.</p>
+    <p class="muted">© 2026 Phạm Nguyễn Minh Trí. Không liên kết với Meta và không được Meta bảo trợ. <a href="/privacy">Quyền riêng tư</a> · <a href="/terms">Điều khoản</a></p>
   </main>
 </body>
 </html>

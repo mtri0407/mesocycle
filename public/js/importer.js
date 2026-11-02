@@ -2,13 +2,17 @@
 import { $, esc } from '/js/dom.js';
 import { runWeekTool } from '/core/week-tools.js';
 import { parseIcs } from '/core/ics.js';
+import { isGreysteel, fromGreysteel } from '/core/greysteel.js';
+import { checkTemplate } from '/core/setup.js';
 
 const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
-let app, importList = null;
-export const clearImport = () => { importList = null; renderImport(); };
+let app, importList = null, carried = null;
+export const clearImport = () => { importList = null; carried = null; renderImport(); };
 const readAsDataUrl = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
 async function importDoc(file, name) {
   const { state, t, askConsent, shrink, api, lang, provider } = app;
+  // A Greysteel Tasks file is read right here too, into a whole week.
+  if (/\.json$/i.test(name) || file.type === 'application/json') { await readPlanner(file); return; }
   // A calendar file is read right here: nothing leaves the device.
   if (/\.ics$/i.test(name) || file.type === 'text/calendar') {
     const items = parseIcs(await file.text(), state.date);
@@ -38,9 +42,44 @@ async function importDoc(file, name) {
     $('import-open').disabled = $('import-sample').disabled = false;
   }
 }
+async function readPlanner(file) {
+  const { t, lang } = app;
+  const note = $('import-status');
+  let data = null;
+  try { data = JSON.parse(await file.text()); } catch { data = null; }
+  if (!isGreysteel(data)) { note.textContent = t('gsBad'); app.showTab('goals'); return; }
+  const out = fromGreysteel(data, { today: app.today().date });
+  const errors = checkTemplate(out.template, lang);
+  if (errors.length) { note.textContent = errors[0]; return; }
+  note.textContent = '';
+  carried = out;
+  importList = null;
+  app.showTab('goals');
+  renderImport();
+  $('import-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderCarried(box) {
+  const { t, template } = app;
+  const s = carried.summary;
+  const replacing = template && !template.sample;
+  box.innerHTML = `<h2>${t('gsTitle')}</h2><p style="margin:0 0 8px">${t('gsSummary')(s, app.hrs(s.focusMin))}</p>
+    <p class="hint">${t('gsHint')}${replacing ? ` ${t('gsReplace')}` : ''}</p>
+    <div class="row" style="margin-top:12px"><button class="primary" id="gs-use">${t('gsUse')}</button><button id="gs-no">${t('cancel')}</button></div>`;
+  $('gs-no').onclick = () => { carried = null; renderImport(); };
+  $('gs-use').onclick = () => {
+    const keep = replacing ? template : null;
+    const next = { ...carried.template, history: keep?.history || [], log: [...(keep?.log || []), ...carried.template.log].slice(-500) };
+    carried = null;
+    renderImport();
+    app.useWeek(next);
+  };
+}
+
 export function renderImport() {
   const box = $('import-card');
-  box.hidden = !importList;
+  box.hidden = !importList && !carried;
+  if (carried) { renderCarried(box); return; }
   if (!importList) return;
   const { template, t, hrs } = app;
   const shortDate = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -84,6 +123,7 @@ async function addImported() {
 
 export function setupImport(context) {
   app = context;
+  $('gs-open').onclick = () => $('doc-file').click();
   $('import-open').onclick = () => $('doc-file').click();
   $('doc-file').onchange = () => {
     const file = $('doc-file').files[0];

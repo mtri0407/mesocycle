@@ -1,6 +1,7 @@
 // Hand edits work on a draft copy. Typing only changes the draft and never
 // redraws the row, so Vietnamese input methods are not interrupted.
 import { $, esc } from '/js/dom.js';
+import { plusDays } from '/core/phases.js';
 
 let app, draft = null;
 export const hasDraft = () => !!draft;
@@ -43,7 +44,10 @@ export function renderEditors() {
   $('ed-times').innerHTML = `<label>${t('wake')} ${field('root', '', 'wake', d.wake, 'type="time"')}</label> <label>${t('sleepAt')} ${field('root', '', 'sleep', d.sleep, 'type="time"')}</label>`;
 
   $('ed-goals').innerHTML = (d.goals || []).map((g) => `<div class="edit-row"><div class="line">${field('goals', g.id, 'title', g.title, `type="text" aria-label="${t('goalsTab')}"`)}${del('goals', g.id)}</div>
-    <div class="line"><select data-c="goals" data-i="${esc(g.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, g.roleId)}</select>${field('goals', g.id, 'measure', g.measure, `type="text" placeholder="${t('measure')}" aria-label="${t('measure')}"`)}<label>${t('deadline')} ${field('goals', g.id, 'deadline', g.deadline, 'type="date"')}</label></div></div>`).join('') || `<p class="hint">${t('noGoals')}</p>`;
+    <div class="line"><select data-c="goals" data-i="${esc(g.id)}" data-f="roleId" aria-label="${t('role')}">${roleOptions(d, g.roleId)}</select>${field('goals', g.id, 'measure', g.measure, `type="text" placeholder="${t('measure')}" aria-label="${t('measure')}"`)}<label>${t('deadline')} ${field('goals', g.id, 'deadline', g.deadline, 'type="date"')}</label></div>
+    ${(g.phases || []).map((p) => `<div class="edit-row sub"><div class="line">${field('phases', p.id, 'title', p.title, `type="text" aria-label="${t('phaseName')}" placeholder="${t('phaseName')}"`)}${del('phases', p.id)}</div>
+      <div class="line"><label>${t('from')} ${field('phases', p.id, 'start', p.start, 'type="date"')}</label><label>${t('to')} ${field('phases', p.id, 'end', p.end, 'type="date"')}</label><label>${t('targetH')} ${field('phases', p.id, 'weeklyMin', p.weeklyMin == null ? '' : p.weeklyMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label>${field('phases', p.id, 'expect', p.expect, `type="text" placeholder="${t('phaseExpect')}" aria-label="${t('phaseExpect')}"`)}</div></div>`).join('')}
+    <div class="line"><button class="small" data-add="phases" data-g="${esc(g.id)}">${t('phaseAdd')}</button></div></div>`).join('') || `<p class="hint">${t('noGoals')}</p>`;
 }
 
 function startDraft() {
@@ -57,7 +61,11 @@ function onEditInput(e) {
   const { c, i, f, day } = el.dataset;
   if (!c) return;
   startDraft();
-  const item = c === 'root' ? draft : draft[c].find((x) => x.id === i);
+  // Phases live inside their goal.
+  const item = c === 'root' ? draft : c === 'phases' ? (draft.goals || []).flatMap((g) => g.phases || []).find((x) => x.id === i) : draft[c].find((x) => x.id === i);
+  if (!item) return;
+  // New dates or hours: the phase applies again when it covers this week.
+  if (c === 'phases' && ['start', 'end', 'weeklyMin'].includes(f)) delete item.applied;
   if (day !== undefined) {
     const wd = Number(day);
     item.days = el.checked ? [...item.days, wd] : item.days.filter((x) => x !== wd);
@@ -65,6 +73,7 @@ function onEditInput(e) {
   else if (f === 'minutes' || f === 'priority') item[f] = Number(el.value);
   else if (f === 'rank') item[f] = el.value === 'extra' ? 'extra' : Number(el.value);
   else if (f === 'deadline') item[f] = el.value || null;
+  else if (f === 'weeklyMin') item[f] = el.value === '' ? null : Math.round(Number(el.value) * 60);
   else item[f] = el.value;
 }
 
@@ -75,7 +84,8 @@ function onEditClick(e) {
   const uid = `e${Date.now().toString(36)}`;
   if (btn.dataset.del) {
     startDraft();
-    draft[btn.dataset.del] = draft[btn.dataset.del].filter((x) => x.id !== btn.dataset.i);
+    if (btn.dataset.del === 'phases') draft.goals = draft.goals.map((g) => ({ ...g, phases: (g.phases || []).filter((p) => p.id !== btn.dataset.i) }));
+    else draft[btn.dataset.del] = draft[btn.dataset.del].filter((x) => x.id !== btn.dataset.i);
     renderEditors();
   } else if (btn.dataset.add) {
     startDraft();
@@ -85,6 +95,12 @@ function onEditClick(e) {
     if (c === 'fixed') draft.fixed.push({ id: uid, title: '', days: [realDay()], start: '08:00', end: '09:00' });
     if (c === 'tasks') draft.tasks.push({ id: uid, title: '', roleId: role, minutes: 60, rank: 2, deadline: null, status: 'todo' });
     if (c === 'goals') (draft.goals = draft.goals || []).push({ id: uid, title: '', roleId: role, measure: '', deadline: null });
+    if (c === 'phases') {
+      const goal = draft.goals.find((g) => g.id === btn.dataset.g);
+      const last = [...(goal.phases || [])].sort((a, b) => a.end.localeCompare(b.end)).at(-1);
+      const start = last && last.end >= app.today().date ? plusDays(last.end, 1) : app.today().date;
+      goal.phases = [...(goal.phases || []), { id: uid, title: '', start, end: plusDays(start, 27), weeklyMin: null, expect: '' }];
+    }
     renderEditors();
   }
 }

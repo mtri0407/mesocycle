@@ -7,7 +7,8 @@ import { runAgent, noDashes } from './agent.js';
 import { runCouncil, COUNCIL_FORMAT } from './council.js';
 import { tradeoffCandidates } from '../public/core/tradeoff.js';
 import { view } from '../public/core/handlers.js';
-import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, CHECKIN_PROMPT, checkinBrief, mondayOf, weekReview, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext } from '../public/core/setup.js';
+import { SETUP_PROMPT, BUILD_WEEK, validateWeek, buildDay, CHECKIN_PROMPT, checkinBrief, mondayOf, weekReview, NEXT_WEEK_PROMPT, PLAN_NEXT_WEEK, nextWeekBrief, validateNext, weekCapacityMin } from '../public/core/setup.js';
+import { PHASES_PROMPT, PLAN_PHASES, phasesBrief, validatePhases } from '../public/core/phases.js';
 import { verifyGoogleToken, createSession, sessionUser, loadData, saveData, deleteData, recordConsent } from './auth.js';
 import { voiceProxy } from './voice.js';
 import { IMPORT_FORMAT, importPrompt, readImport, documentPart } from './import.js';
@@ -33,7 +34,7 @@ const fromProvider = (err) => 'canSwitch' in err || 'status' in err;
 
 // Guard for routes that call a model or write to KV: a limit per visitor and
 // per network (Cloudflare rate limit bindings), and a daily ceiling (KV).
-const AI_ROUTES = ['/api/agent', '/api/setup', '/api/transcribe', '/api/checkin', '/api/import', '/api/model-check', '/api/feedback', '/api/reminders'];
+const AI_ROUTES = ['/api/agent', '/api/setup', '/api/phases', '/api/transcribe', '/api/checkin', '/api/import', '/api/model-check', '/api/feedback', '/api/reminders'];
 const MAX_IMAGE_CHARS = 8e6;
 const MAX_FILE_CHARS = 14e6; // about 10 MB
 const MAX_PLAN_CHARS = 300_000; // the same ceiling as a saved plan: a real plan always fits
@@ -223,6 +224,20 @@ export default {
           { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\n${checkinBrief(body.template, view(body.state), { weekday: body.weekday, date: body.state.date })}` },
         ], maxTokens: 3000 }, preferred);
         return json({ ok: true, text: noDashes(out.text.trim()) });
+      }
+
+      // A goal in phases: the model proposes, code checks dates, hours and the
+      // deadline, and nothing applies until the person approves it.
+      if (url.pathname === '/api/phases' && body) {
+        const t = body.template;
+        const goal = t?.goals?.find((g) => g.id === body.goalId);
+        const role = goal && t.roles?.find((r) => r.id === goal.roleId);
+        const today = String(body.date || '');
+        if (!goal || !role || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return json({ ok: false, error: 'Unknown goal' }, 400);
+        const capacityMin = weekCapacityMin(t);
+        const messages = [{ role: 'system', content: PHASES_PROMPT }, { role: 'user', content: `Language: ${body.lang === 'vi' ? 'Vietnamese' : 'English'}.\n${phasesBrief(t, goal, { today, capacityMin })}` }];
+        const { failed, value, steps, modelMs } = await checkedCall(env, { messages, tool: PLAN_PHASES, preferred, check: (a) => validatePhases(a, { goal, role, today, capacityMin }), failure: 'Could not plan the phases, try again.' });
+        return failed || json({ ok: true, phases: value.phases, steps, modelMs });
       }
 
       // Plan next week from how the last one went. This only proposes: the

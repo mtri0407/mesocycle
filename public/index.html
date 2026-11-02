@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mesocycle: your day broke, say what happened</title>
   <meta name="description" content="Call an AI and say what happened. It re-plans your day in seconds, protects your sleep, your people and your health, and never cuts anything without asking. Built on Meta's Muse models.">
-  <meta name="theme-color" content="#2457d6">
+  <meta name="theme-color" content="#0064e0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mesocycle">
   <meta property="og:title" content="Your day broke. Say what happened.">
@@ -14,7 +14,7 @@
   <meta property="og:image" content="https://mesocycle.minhtriphamnguyen69.workers.dev/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Mesocycle on a phone: two AI advisors weigh a broken evening, one for deadlines, one for your life.">
+  <meta property="og:image:alt" content="Mesocycle: two AI advisors weigh a broken evening, one for deadlines, one for your life.">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,123 +32,160 @@
   <link rel="modulepreload" href="/js/importer.js">
   <link rel="modulepreload" href="/js/reminders.js">
   <link rel="modulepreload" href="/js/picture.js">
+  <link rel="modulepreload" href="/js/focus.js">
+  <link rel="modulepreload" href="/js/phases-ui.js">
+  <link rel="modulepreload" href="/js/tour.js">
   <link rel="modulepreload" href="/core/handlers.js">
   <link rel="modulepreload" href="/core/planner.js">
   <link rel="modulepreload" href="/core/invariants.js">
   <link rel="modulepreload" href="/core/tools.js">
   <link rel="modulepreload" href="/core/setup.js">
+  <link rel="modulepreload" href="/core/phases.js">
   <link rel="modulepreload" href="/core/radar.js">
   <link rel="modulepreload" href="/core/week-tools.js">
   <link rel="modulepreload" href="/core/diff.js">
   <link rel="modulepreload" href="/core/ics.js">
+  <link rel="modulepreload" href="/core/greysteel.js">
   <link rel="modulepreload" href="/core/sample.js">
   <link rel="modulepreload" href="/core/demo-state.js">
 </head>
 <body>
   <noscript><p style="padding:16px">Mesocycle needs JavaScript. Planning runs on your device.</p></noscript>
-  <header class="top">
-    <p class="brand">Mesocycle</p>
+
+  <!-- On a laptop this is the sidebar; on a phone only the tabs stay, at the bottom. -->
+  <aside class="side" id="side">
+    <a class="brand side-only" href="/"><img src="/icon.svg" alt="" width="30" height="30"><span>Mesocycle</span></a>
     <nav id="tabs" role="tablist">
-      <button role="tab" data-tab="today"><b>◉</b><span data-t="today"></span></button>
-      <button role="tab" data-tab="week"><b>▦</b><span data-t="weekTab"></span></button>
-      <button role="tab" data-tab="goals"><b>◎</b><span data-t="goalsTab"></span></button>
+      <button role="tab" data-tab="today"><b aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></b><span data-t="today"></span></button>
+      <button role="tab" data-tab="week"><b aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></b><span data-t="weekTab"></span></button>
+      <button role="tab" data-tab="goals"><b aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/></svg></b><span data-t="goalsTab"></span></button>
     </nav>
+    <div class="side-only side-links">
+      <button class="side-link" id="side-try"><span aria-hidden="true">▶</span><span data-t="tryShort"></span></button>
+      <button class="side-link" id="side-tour"><span aria-hidden="true">🧭</span><span data-t="tourBtn"></span></button>
+      <a class="side-link" href="/huong-dan"><span aria-hidden="true">📖</span><span data-t="guideLink"></span></a>
+    </div>
+    <footer class="side-only foot">
+      <p data-t="footCopy"></p>
+      <p data-t="footNot"></p>
+      <p><a href="/privacy" data-t="privacyLink"></a> · <a href="/terms" data-t="termsLink"></a> · <a href="https://github.com/mtri0407/mesocycle" rel="noopener">GitHub</a></p>
+    </footer>
+  </aside>
+
+  <div class="shell">
+  <header class="top">
+    <a class="brand" href="/"><img src="/icon.svg" alt="" width="26" height="26"><span>Mesocycle</span></a>
     <div class="right">
       <span class="chip" id="save-note" data-t="unsaved" hidden></span>
-      <span class="muted" id="date" style="font-size:13px"></span>
-      <a id="guide" href="/huong-dan" style="font-size:13px;color:var(--accent)">?</a>
-      <button class="small" id="lang" title="Tiếng Việt / English"></button>
+      <span class="muted" id="date"></span>
+      <a id="guide" class="pill-link" href="/huong-dan">?</a>
+      <button class="small pill" id="lang" title="Tiếng Việt / English"></button>
     </div>
   </header>
   <main>
-    <div id="p-today">
+    <div id="p-today" class="today">
     <div class="caption" id="demo-cap" role="status" hidden></div>
-    <section class="card caption" id="offline-bar" hidden data-t="offlineNote" style="margin:0 0 14px"></section>
-    <section class="card caption" id="sample-bar" hidden style="margin:0 0 14px"></section>
-    <section class="card caption" id="week-banner" hidden style="margin:0 0 14px"></section>
-    <section class="card intro" id="intro"></section>
-    <section class="card" id="setup" hidden>
-      <h2 data-t="setupTitle"></h2>
-      <p class="hint" data-t="setupHint" style="margin-top:0"></p>
-      <textarea id="setup-text" style="min-height:120px"></textarea>
-      <label class="consent" data-consent><input type="checkbox" id="setup-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
-      <div class="row" style="margin-top:8px">
-        <button class="primary" id="setup-go" data-t="build"></button>
-        <button id="setup-mic"></button>
-        <button id="setup-photo" data-t="photo"></button>
-        <span class="chip" id="setup-photo-chip" hidden></span>
-        <button class="small" id="setup-cancel" data-t="cancel"></button>
-      </div>
-      <div class="hint" id="setup-status"></div>
-    </section>
-    <section class="card caption" id="checkin" hidden style="margin:0 0 14px"></section>
-    <section class="card caption warnbar" id="risk-bar" hidden style="margin:0 0 14px"></section>
-    <section class="card now" id="now-card"></section>
-    <section class="card" id="next-card"></section>
-    <details class="card" id="tl-card" open>
-      <summary data-t="timeline"></summary>
-      <div class="tl" id="tl" style="margin-top:12px"></div>
-    </details>
 
-    <details class="card" id="promises"><summary id="promises-sum"></summary><ul id="promises-list" style="margin:10px 0 0;padding-left:20px;font-size:14px"></ul></details>
+    <div class="chat-col">
+      <section class="intro" id="intro"></section>
+      <h1 class="greet" id="greet" hidden></h1>
+      <section class="card" id="setup" hidden>
+        <h2 data-t="setupTitle"></h2>
+        <p class="hint" data-t="setupHint" style="margin-top:0"></p>
+        <textarea id="setup-text" style="min-height:120px"></textarea>
+        <label class="consent" data-consent><input type="checkbox" id="setup-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" id="setup-go" data-t="build"></button>
+          <button id="setup-mic"></button>
+          <button id="setup-photo" data-t="photo"></button>
+          <span class="chip" id="setup-photo-chip" hidden></span>
+          <button class="small" id="setup-cancel" data-t="cancel"></button>
+        </div>
+        <div class="hint" id="setup-status"></div>
+        <p class="hint"><button class="linkish" id="gs-open" data-t="gsLink"></button></p>
+      </section>
+      <section class="ai-msg" id="checkin" hidden></section>
 
-    <section class="card">
-      <h2 data-t="changed"></h2>
-      <textarea id="say"></textarea>
-      <div class="row" style="margin-top:8px">
-        <button class="primary" id="send" data-t="replan"></button>
-        <button id="mic"></button>
-        <button id="photo" data-t="photo"></button>
-        <input type="file" id="photo-file" accept="image/*" hidden>
-        <label class="row" style="font-size:14px;gap:6px"><input type="checkbox" id="private"> <span data-t="privateOn"></span></label>
-      </div>
-      <p class="hint" data-t="changedHint"></p>
-      <p class="hint" id="private-hint" data-t="privateHint" hidden></p>
-      <div id="status" class="hint" role="status" aria-live="polite"></div>
-      <ol class="steps" id="live-steps"></ol>
-      <div id="thread"></div>
-      <div id="answer" aria-live="polite"></div>
-    </section>
-
-    <details class="card">
-      <summary data-t="feedback"></summary>
-      <p class="hint" data-t="feedbackHint"></p>
-      <div class="row" id="fb-stars" role="radiogroup" style="margin-top:8px"></div>
-      <textarea id="fb-text" style="margin-top:8px"></textarea>
-      <label class="consent"><input type="checkbox" id="fb-quote"> <span data-t="fbQuote"></span></label>
-      <div class="row" style="margin-top:8px">
-        <button id="fb-send" data-t="send"></button>
-        <span class="hint" id="fb-status"></span>
-      </div>
-    </details>
-
-    <div class="row" id="real-row" hidden style="margin-bottom:14px">
-      <button class="small" id="rebuild" data-t="rebuild"></button>
-      <button class="small" id="to-demo" data-t="toDemo"></button>
-      <button class="small" id="remind" hidden></button>
-      <span class="hint" id="remind-status" style="margin:0"></span>
+      <section class="ask" id="ask">
+        <div id="thread"></div>
+        <div class="turn me" id="live-me" hidden></div>
+        <div id="status" class="hint" role="status" aria-live="polite"></div>
+        <ol class="steps" id="live-steps"></ol>
+        <div id="answer" aria-live="polite"></div>
+        <div class="composer">
+          <label class="sr" for="say" data-t="changed"></label>
+          <textarea id="say" rows="2"></textarea>
+          <div class="composer-row">
+            <button class="icon-btn" id="photo"><svg viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.7l1.3-2h5l1.3 2h1.7A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+            <input type="file" id="photo-file" accept="image/*" hidden>
+            <label class="lock"><input type="checkbox" id="private"> <span data-t="privateOn"></span></label>
+            <span class="grow"></span>
+            <button class="pill" id="mic"></button>
+            <button class="send" id="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="chips" id="chips"></div>
+        <p class="hint" data-t="changedHint"></p>
+        <p class="hint" id="private-hint" data-t="privateHint" hidden></p>
+      </section>
     </div>
 
-    <details class="card" id="demo-box">
-      <summary data-t="demoControls"></summary>
-      <div class="row" style="margin-top:10px">
-        <label><span data-t="clock"></span> <input type="time" id="clock" step="300"></label>
-        <button id="reset" data-t="reset"></button>
-      </div>
-      <p class="hint" data-t="clockHint"></p>
-    </details>
+    <div class="plan-col">
+      <section class="card caption" id="offline-bar" hidden data-t="offlineNote"></section>
+      <section class="card caption" id="sample-bar" hidden></section>
+      <section class="card caption" id="week-banner" hidden></section>
+      <section class="card caption warnbar" id="risk-bar" hidden></section>
+      <section class="card focus-bar" id="focus-bar" hidden></section>
+      <section class="card now" id="now-card"></section>
+      <section class="card" id="next-card"></section>
+      <details class="card" id="tl-card" open>
+        <summary data-t="timeline"></summary>
+        <div class="tl" id="tl" style="margin-top:12px"></div>
+      </details>
+      <details class="card" id="promises"><summary id="promises-sum"></summary><ul id="promises-list"></ul></details>
 
-    <section class="card" id="account" style="padding:10px 16px">
-      <div class="row" style="justify-content:space-between">
-        <span class="hint" id="account-text" style="margin:0"></span>
-        <label class="consent" data-consent><input type="checkbox" id="login-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
-        <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button><button class="small" id="delete-data" data-t="deleteData" hidden></button></div>
+      <details class="card" id="feedback">
+        <summary data-t="feedback"></summary>
+        <p class="hint" data-t="feedbackHint"></p>
+        <div class="row" id="fb-stars" role="radiogroup" style="margin-top:8px"></div>
+        <textarea id="fb-text" style="margin-top:8px"></textarea>
+        <label class="consent"><input type="checkbox" id="fb-quote"> <span data-t="fbQuote"></span></label>
+        <div class="row" style="margin-top:8px">
+          <button id="fb-send" data-t="send"></button>
+          <span class="hint" id="fb-status"></span>
+        </div>
+      </details>
+
+      <div class="row" id="real-row" hidden>
+        <button class="small" id="rebuild" data-t="rebuild"></button>
+        <button class="small" id="to-demo" data-t="toDemo"></button>
+        <button class="small" id="remind" hidden></button>
+        <span class="hint" id="remind-status" style="margin:0"></span>
       </div>
-    </section>
+
+      <details class="card" id="demo-box">
+        <summary data-t="demoControls"></summary>
+        <div class="row" style="margin-top:10px">
+          <label><span data-t="clock"></span> <input type="time" id="clock" step="300"></label>
+          <button id="reset" data-t="reset"></button>
+        </div>
+        <p class="hint" data-t="clockHint"></p>
+      </details>
+
+      <section class="card" id="account">
+        <div class="row" style="justify-content:space-between">
+          <span class="hint" id="account-text" style="margin:0"></span>
+          <label class="consent" data-consent><input type="checkbox" id="login-consent"> <span><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></span></label>
+          <div class="row"><div id="gsi"></div><button class="small" id="logout" hidden></button><button class="small" id="delete-data" data-t="deleteData" hidden></button></div>
+        </div>
+      </section>
+    </div>
     </div>
 
-    <div id="p-week" hidden>
+    <div id="p-week" class="page" hidden>
+      <h1 class="page-title" data-t="weekTab"></h1>
       <section class="card" id="review-card" hidden></section>
+      <section class="card" id="log-card" hidden></section>
       <section class="card" id="trend-card" hidden></section>
       <section class="card"><div id="week-card"></div><div id="week-forecast"></div></section>
       <section class="card" id="week-invite" hidden></section>
@@ -160,7 +197,8 @@
       </div>
     </div>
 
-    <div id="p-goals" hidden>
+    <div id="p-goals" class="page" hidden>
+      <h1 class="page-title" data-t="goalsTab"></h1>
       <section class="card" id="goals-card"></section>
       <section class="card" id="import-start" hidden>
         <h2 data-t="importTitle"></h2>
@@ -169,7 +207,7 @@
           <button class="primary" id="import-open" data-t="importBtn"></button>
           <button id="import-sample" data-t="importSample"></button>
         </div>
-        <input type="file" id="doc-file" accept="application/pdf,image/*,.ics,text/calendar" hidden>
+        <input type="file" id="doc-file" accept="application/pdf,image/*,.ics,text/calendar,.json,application/json" hidden>
         <div class="hint" id="import-status"></div>
       </section>
       <section class="card" id="import-card" hidden></section>
@@ -178,14 +216,23 @@
       </div>
     </div>
 
-    <p class="hint" style="text-align:center"><a href="/privacy" data-t="privacyLink" style="color:var(--accent)"></a> · <a href="/terms" data-t="termsLink" style="color:var(--accent)"></a></p>
+    <footer class="foot main-foot">
+      <p data-t="footCopy"></p>
+      <p data-t="footNot"></p>
+      <p><a href="/privacy" data-t="privacyLink"></a> · <a href="/terms" data-t="termsLink"></a> · <a href="https://github.com/mtri0407/mesocycle" rel="noopener">GitHub</a></p>
+    </footer>
 
     <dialog id="consent-sheet" class="card">
       <p style="margin-top:0"><span data-t="consentText"></span> <a href="/privacy" target="_blank" rel="noopener" data-t="consentLink"></a><span data-t="consentTail"></span></p>
       <div class="row"><button class="primary" id="consent-yes" data-t="consentYes"></button><button id="consent-no" data-t="cancel"></button></div>
     </dialog>
+    <dialog id="focus-check" class="card">
+      <p style="margin-top:0" id="focus-check-text"></p>
+      <label class="row"><span data-t="focusStopped"></span> <input type="time" id="focus-end"></label>
+      <div class="row" style="margin-top:12px"><button class="primary" id="focus-use" data-t="focusUse"></button><button id="focus-right" data-t="focusRight"></button></div>
+    </dialog>
 
-    <button id="call" class="fab" data-t="callBtn"></button>
+    <button id="call" class="fab"><span class="wave" aria-hidden="true"><i></i><i></i><i></i></span><span data-t="callBtn"></span></button>
     <section class="card" id="call-box" hidden aria-live="polite">
       <div class="row" style="justify-content:space-between">
         <b id="call-phase"></b>
@@ -203,7 +250,9 @@
         <span class="hint" id="edit-status" style="margin:0"></span>
       </div>
     </section>
+    <div id="tour" hidden></div>
   </main>
+  </div>
 
   <script type="module" src="/js/app.js"></script>
 </body>

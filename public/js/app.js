@@ -12,6 +12,9 @@ import { setupReminders, setVapidKey, renderRemind, syncReminders } from '/js/re
 import { setupEditors, renderEditors, hasDraft, dropDraft } from '/js/editors.js';
 import { setupImport, renderImport, clearImport } from '/js/importer.js';
 import { setupVoice, inCall, micLabels } from '/js/voice.js';
+import { setupFocus, nowButtons, renderFocusBar, renderLog, startFocus, stopFocus, dropFocus, focusOn, focusRunning } from '/js/focus.js';
+import { setupPhases, phasesHtml, wirePhases, clearPhaseDrafts } from '/js/phases-ui.js';
+import { setupTour, startTour, endTour } from '/js/tour.js';
 
 
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -28,7 +31,7 @@ const today = () => { const { d } = logicalNow(); return { date: `${d.getFullYea
 const saveTemplate = () => { if (template) template.updatedAt = Date.now(); store.set('meso-template', JSON.stringify(template)); };
 // Times in the view are HH:MM; on a long day, 00:30 comes after 23:00.
 const dayMin = (hhmm) => { const m = toMin(hhmm); const s = state?.settings; return s && m < s.wake && m + 1440 < s.sleep ? m + 1440 : m; };
-function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; renderIntro(); }
+function setMode(m) { mode = m; store.set('meso-mode', m); $('real-row').hidden = m !== 'real'; $('demo-box').hidden = m === 'real'; renderIntro(); renderGreet(); }
 
 let stats;
 try { stats = JSON.parse(store.get('meso-stats')) || null; } catch { stats = null; }
@@ -44,6 +47,7 @@ function count(kind, minutes = 0) {
   if (kind === 'done' && stats.lastReplan === d && !stats.rescuedDays.includes(d)) stats.rescuedDays.push(d);
   if (kind === 'approve') stats.approvals++;
   if (kind === 'done') stats.doneMin += minutes;
+  if (kind === 'focus') stats.focusMin = (stats.focusMin || 0) + minutes;
   if (kind === 'repaid') stats.debtRepaidMin += minutes;
   saveStats();
 }
@@ -134,6 +138,7 @@ async function onGoogle(resp) {
     const data = await api('/api/login', { credential: resp.credential, consent: CONSENT_VERSION });
     sid = data.sid; store.set('meso-sid', sid); account = data.user; cloudRead = true;
     renderAccount();
+    renderGreet();
     await adoptCloud(data.data);
   } catch (e) { $('account-text').textContent = e.message; }
 }
@@ -154,6 +159,7 @@ async function connect() {
   $('save-note').hidden = !sid || cloudRead;
   renderConsent();
   renderAccount();
+  renderGreet();
   renderRemind();
   loadGoogle();
 }
@@ -186,9 +192,15 @@ function applyLang() {
   $('say').setAttribute('aria-label', t('changed'));
   $('setup-text').setAttribute('aria-label', t('setupTitle'));
   $('fb-text').setAttribute('aria-label', t('feedback'));
+  $('send').setAttribute('aria-label', t('replan'));
+  $('send').title = t('replan');
+  $('photo').setAttribute('aria-label', t('photo'));
+  $('photo').title = t('photo');
   micLabels();
   $('setup-photo-chip').textContent = t('photoAdded');
   renderIntro();
+  renderGreet();
+  renderChips();
   if (view) { render(); renderExtras(); renderImport(); }
 }
 
@@ -196,14 +208,55 @@ function renderIntro() {
   // The intro explains the demo, so it stays out of the way once the week is yours.
   $('intro').hidden = mode === 'real' || store.get('meso-intro') === 'hidden';
   if ($('intro').hidden) return;
-  $('intro').innerHTML = t('intro') + `<div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button>${ownWeek() ? `<button id="to-week">${t('toWeek')}</button>` : ''}<button class="small" id="hide">${t('hideIntro')}</button></div>`;
+  $('intro').innerHTML = `<h1 class="hero">${t('heroA')}<br><span class="grad">${t('heroB')}</span></h1>
+    <p class="lead">${t('lead')}</p><p class="note">${t('note')}</p>
+    <div class="row"><button class="primary" id="try">${t('tryDemo')}</button><button id="sample-open">${t('sampleBtn')}</button><button id="setup-open">${t('setupBtn')}</button>${ownWeek() ? `<button id="to-week">${t('toWeek')}</button>` : ''}<button id="tour-open">🧭 ${t('tourBtn')}</button><button class="small" id="hide">${t('hideIntro')}</button></div>`;
   $('try').onclick = tryDemo;
+  $('tour-open').onclick = startTour;
   $('setup-open').onclick = openSetup;
   $('sample-open').onclick = loadSample;
   $('hide').onclick = () => { store.set('meso-intro', 'hidden'); $('intro').hidden = true; };
   if (ownWeek()) $('to-week').onclick = backToWeek;
 }
 const ownWeek = () => !!template && !template.sample;
+
+// On your own week the composer is the front page: a greeting, then the question.
+function renderGreet() {
+  const box = $('greet');
+  box.hidden = mode !== 'real';
+  if (box.hidden) return;
+  const h = new Date().getHours();
+  const part = h < 4 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+  const words = String(account?.name || '').trim().split(/\s+/).filter(Boolean);
+  const name = words.length ? (lang === 'vi' ? words.at(-1) : words[0]) : '';
+  box.innerHTML = `${esc(t('hello')[part])}${name ? `, ${esc(name)}` : ''}.<br><span class="grad">${esc(t('whatChanged'))}</span>`;
+}
+
+// Suggestions under the composer, until a conversation starts. On made-up
+// plans (the demo, the sample week) they go out without asking for consent:
+// nothing personal is in them.
+function renderChips() {
+  const box = $('chips');
+  if (chatLog.length || sendCtl) { box.innerHTML = ''; return; }
+  const own = mode === 'real' && !template?.sample;
+  const list = t(own ? 'chipsReal' : 'chipsDemo');
+  box.innerHTML = list.map((c, i) => `<button data-chip="${i}">${esc(c)}</button>`).join('');
+  box.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { const text = list[Number(b.dataset.chip)]; $('say').value = text; send(text, null, { demo: !own }); };
+  });
+}
+
+// Moving in a whole week (a file from Greysteel Tasks). It counts as an edit.
+async function useWeek(next) {
+  store.set('meso-own', '');
+  setMode('real');
+  startPlan();
+  template = next;
+  saveTemplate();
+  await newDay();
+  showTab('today');
+}
+const changeTemplate = (next) => apply({ template: next });
 async function backToWeek() { setMode('real'); state = null; startPlan(); await openDay(); }
 
 const CODES = { rate: 'errRate', cap: 'errCap', region: 'errRegion', ai: 'errAi' };
@@ -242,6 +295,7 @@ function draw() {
   loadWeek();
   scheduleSave();
   syncReminders();
+  if (!chatLog.length) renderChips(); // suggestions follow the plan on screen
 }
 function apply(data) { adopt(data); draw(); }
 
@@ -285,8 +339,13 @@ function startPlan() {
   clearImport();
   nextPlan = null; reviewOpen = false;
   $('demo-cap').hidden = true;
+  clearPhaseDrafts();
+  dropFocus();
+  endTour();
   renderThread();
+  $('live-me').hidden = true; $('live-me').textContent = '';
   $('answer').innerHTML = ''; $('live-steps').innerHTML = ''; $('status').textContent = '';
+  renderChips();
 }
 
 async function refresh() { apply(await api('/api/tool', { state, name: 'get_state' })); }
@@ -369,15 +428,12 @@ function render() {
     <div class="row muted" style="margin-bottom:12px">
       <span>${now.start} - ${now.end}</span><span class="chip role">${esc(roleName(now.role))}</span>
     </div>
-    <div class="row">
-      <button class="primary" data-act="done">${t('done')}</button>
-      <button data-act="more">${t('more')}</button>
-      <button data-act="skip">${t('skip')}</button>
-    </div>
+    ${nowButtons(now)}
     <p class="hint">${t('nowHint')}</p>${paceLine(now)}` : `<h2>${t('now')}</h2><div class="now-title">${state.now >= (state.settings?.sleep ?? 1380) ? t('pastBedtime') : t('nothingLeft')}</div>
     <p class="hint">${t('debtNote')}</p>${hasBacklog() ? `<button class="primary" id="pull-more">${t('pullMore')}</button>` : ''}`;
   if (!now && hasBacklog()) $('pull-more').onclick = async () => apply(await api('/api/more', { template, state }));
   if (now) $('now-card').querySelectorAll('button[data-act]').forEach((b) => { b.onclick = () => act(b.dataset.act, now); });
+  renderFocusBar(now);
   if (banner) {
     const late = state.now - focus.end;
     $('late-go').onclick = () => { focus = { id: now.id, end: state.now }; $('say').value = t('lateText')(late, now.title); send(); };
@@ -440,7 +496,7 @@ async function morningCheckin() {
     if (!text) return;
     const box = $('checkin');
     box.hidden = false;
-    box.innerHTML = `<h2>${t('checkinTitle')}</h2><p style="margin:0 0 10px">${esc(text)}</p>
+    box.innerHTML = `<div class="ai-head"><img src="/icon.svg" alt="">${t('checkinTitle')}</div><p>${esc(text)}</p>
       <div class="row"><button class="primary small" id="checkin-ok">${t('checkinOk')}</button><button class="small" id="checkin-change">${t('checkinChange')}</button></div>`;
     $('checkin-ok').onclick = () => { box.hidden = true; };
     $('checkin-change').onclick = () => { box.hidden = true; $('say').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('say').focus(); };
@@ -449,10 +505,19 @@ async function morningCheckin() {
 
 async function act(kind, item) {
   if (sendCtl) return; // the agent is changing this plan right now
+  if (kind === 'focus') { startFocus(item); render(); return; }
+  if (kind === 'drop') { dropFocus(); render(); return; }
+  if (kind === 'stop') {
+    // Stopped before it was finished: what is left of the block gets shorter.
+    const minutes = await stopFocus();
+    if (minutes) apply(await api('/api/progress', { state, id: item.id, minutes }));
+    return;
+  }
   let args;
   if (kind === 'done') {
-    // Real minutes spent: from the item's start to the clock, if the clock moved on.
-    const spent = state.now > dayMin(item.start) ? state.now - dayMin(item.start) : span(item);
+    // Real minutes: from the timer if it ran, otherwise from the item's start to the clock.
+    const timed = focusOn(item) ? await stopFocus() : null;
+    const spent = timed || (state.now > dayMin(item.start) ? state.now - dayMin(item.start) : span(item));
     args = { id: item.id, status: 'done', minutes: spent };
     // The demo clock stands still, so finishing moves it on. On a real day the
     // next block simply starts now, even if this one ended early.
@@ -507,6 +572,7 @@ const PROMISE_OF = (e) => {
 };
 
 function renderExtras() {
+  renderLog();
   renderBanner();
   renderReview();
   renderGoals();
@@ -664,9 +730,11 @@ function renderGoals() {
       <div class="hint" style="margin:0">${t('goalHours')(hrs(done), hrs(target))}</div>
       <div class="bar"><i style="width:${target ? Math.min(100, Math.round((done / target) * 100)) : 0}%"></i></div>
       ${p?.behind ? `<p class="warn" style="margin:8px 0 0;font-size:14px">${t('goalBehind')(hrs(p.doneMin), hrs(p.expectedMin))}</p>` : ''}
+      ${template.sample ? '' : phasesHtml(g)}
     </div>`;
   }).join('') || `<p class="muted" style="margin:0">${t('noGoals')}</p>`}
-  ${free.length && goals.length ? `<p class="hint">${t('noGoalRoles')}: ${free.map(esc).join(', ')}</p>` : ''}`;
+  ${free.length && goals.length ? `<p class="hint">${t('noGoalRoles')}: ${free.map(esc).join(', ')}</p>` : ''}${goals.length && !template.sample ? `<p class="hint">${t('phaseApplies')}</p>` : ''}`;
+  wirePhases(box);
 }
 
 // Photo: shrink it in the browser, then hand it to the agent (Muse Spark reads images).
@@ -734,6 +802,8 @@ async function send(textArg, image = null, opts = {}) {
   const alive = () => { clearTimeout(quiet); quiet = setTimeout(() => ctl.abort(), opts.demo ? 20000 : 60000); };
   alive();
   $('send').disabled = true;
+  $('chips').innerHTML = '';
+  $('live-me').textContent = text; $('live-me').hidden = false;
   $('status').textContent = image ? t('readingPhoto') : t('thinking');
   $('answer').innerHTML = ''; $('live-steps').innerHTML = '';
   const started = Date.now();
@@ -786,6 +856,7 @@ async function send(textArg, image = null, opts = {}) {
     const noNet = e instanceof TypeError;
     if (noNet) offline(true);
     $('status').textContent = ctl.signal.aborted ? t('errSlow') : noNet ? t('offlineAi') : e.message;
+    if (!opts.demo) { $('live-me').hidden = true; renderChips(); } // the words are still in the box
     return null;
   } finally {
     clearTimeout(quiet);
@@ -850,7 +921,7 @@ function showAnswer(data) {
   // card shows only what makes it different.
   const both = p && p.options.length > 1 ? p.options[0].ids.filter((id) => p.options.every((o) => o.ids.includes(id))) : [];
   $('live-steps').innerHTML = '';
-  $('answer').innerHTML = `<p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
+  $('answer').innerHTML = `<div class="ai-head"><img src="/icon.svg" alt="">Mesocycle</div><p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
     (both.length ? `<p class="hint">${t('eitherWay')}: ${esc(both.map(title).join(', '))}</p>` : '') +
     (p ? p.options.map((o, i) => `<div class="option ${o.by || ''}">
       <div class="row" style="justify-content:space-between"><strong>${t('guardian')[o.by] || (i === 0 ? t('suggested') : t('or'))}</strong>${o.suggested && !p.agreed ? `<span class="chip">${t('suggested')}</span>` : ''}</div>
@@ -920,6 +991,7 @@ async function playRecording() {
       apply(e);
       pendingProposal = e.proposal || null;
       e.recorded = true;
+      $('say').value = '';
       e.receipt = receiptHtml(before, null, e);
       showAnswer(e);
     }
@@ -991,7 +1063,7 @@ async function tick() {
   if (mode !== 'real' || !state || template?.sample || sendCtl) return;
   const d = today();
   if (state.date !== d.date && template) {
-    if (inCall() || hasDraft()) return; // the new day can wait for the end of a call or an edit
+    if (inCall() || hasDraft() || focusRunning()) return; // the new day can wait for a call, an edit or a timer
     startPlan();
     await newDay(state);
     if (started) morningCheckin();
@@ -1053,6 +1125,7 @@ $('fb-send').onclick = async () => {
 // these functions, so the rules of a new plan stay in one place.
 const shared = {
   t, api, apply, send, askConsent, showTab, count, errMsg, hrs, rcStyle, realDay, dayMin, logicalNow, shrink, provider, visitorId, openSetup, loadSample,
+  today, act, renderGoals, changeTemplate, useWeek,
   snapshotForUndo: () => undoStack.push(snapshot()),
   get mode() { return mode; }, get template() { return template; }, get state() { return state; }, get view() { return view; }, get lang() { return lang; }, get run() { return run; },
 };
@@ -1060,6 +1133,11 @@ setupReminders(shared);
 setupEditors(shared);
 setupImport(shared);
 setupVoice(shared);
+setupFocus(shared);
+setupPhases(shared);
+setupTour(shared);
+$('side-tour').onclick = startTour;
+$('side-try').onclick = () => { setMode('demo'); showTab('today'); tryDemo(); };
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 // A failure nobody planned for still says something, and says the plan is safe.
