@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, pullNext, validateNext, adoptNext, checkTemplate } from '../public/core/setup.js';
+import { validateWeek, buildDay, forecastWeek, rebaseDay, rollover, goalPace, checkinBrief, pullNext, validateNext, adoptNext, checkTemplate, starterWeek } from '../public/core/setup.js';
 import { replan } from '../public/core/planner.js';
 import { runWeekTool } from '../public/core/week-tools.js';
 import { deadlineRadar } from '../public/core/radar.js';
@@ -397,4 +397,30 @@ test('radar: an overdue task stays overdue even when there is time to finish it'
   const [row] = radarFor(late);
   assert.equal(row.ok, false);
   assert.equal(row.shortMin, 30);
+});
+
+test('a time of day from the model is checked, kept on the role, and holds on a new day', () => {
+  const roles = [{ name: 'Study', priority: 1, weeklyHours: 20, floorHours: 12 }, { name: 'Family', priority: 2, weeklyHours: 2, floorHours: 2, from: '19:00', to: '22:00' }];
+  const { template } = validateWeek(week({ roles }));
+  assert.deepEqual(template.roles[1].window, { from: '19:00', to: '22:00' });
+  assert.equal(template.roles[0].window, undefined);
+  const day = buildDay(template, { date: '2026-11-03', weekday: 2, now: 420 });
+  for (const p of replan(day).placed.filter((x) => x.roleId === 'r2')) assert.ok(p.start >= 19 * 60 && p.end <= 22 * 60);
+  assert.ok(validateWeek(week({ roles: [roles[0], { ...roles[1], to: '19:10' }] })).errors.some((e) => /from and to/.test(e)));
+  assert.ok(validateWeek(week({ roles: [roles[0], { ...roles[1], from: 'evening' }] })).errors.length);
+});
+
+test('a hand-edited time of day needs both ends', () => {
+  const { template } = validateWeek(week());
+  assert.deepEqual(checkTemplate({ ...template, roles: [{ ...template.roles[0], window: { from: '16:00', to: '21:00' } }, template.roles[1]] }), []);
+  assert.equal(checkTemplate({ ...template, roles: [{ ...template.roles[0], window: { from: '16:00', to: '' } }, template.roles[1]] }, 'vi').length, 1);
+});
+
+test('a week by hand passes the same checks as any edit, in both languages', () => {
+  for (const lang of ['en', 'vi']) {
+    const t = starterWeek(lang);
+    assert.deepEqual(checkTemplate(t, lang), []);
+    const day = buildDay(t, { date: '2026-11-03', weekday: 2, now: 420 });
+    assert.ok(replan(day).placed.length >= 1);
+  }
 });

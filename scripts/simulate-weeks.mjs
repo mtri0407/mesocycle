@@ -30,11 +30,19 @@ const int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
 const pick = (xs) => xs[Math.floor(r() * xs.length)];
 const hhmm = (m) => toHHMM(m);
 
+// Some roles keep a time of day. A second generator decides it, so the weeks stay the same.
+const rw = rng(SEED + 1);
+function timeOfDay() {
+  if (rw() >= 0.25) return {};
+  const from = (6 + Math.floor(rw() * 13)) * 60;
+  return { window: { from: hhmm(from), to: hhmm(Math.min(23 * 60, from + (2 + Math.floor(rw() * 8)) * 60)) } };
+}
+
 let uid = 0;
 function newTemplate(date) {
   const roles = Array.from({ length: int(2, 6) }, (_, i) => {
     const target = int(1, 12) * 120;
-    return { id: `r${i}`, name: `Role ${i}`, priority: i + 1, targetMin: target, floorMin: r() < 0.7 ? int(0, target / 30) * 30 : 0, kind: r() < 0.5 ? 'life' : 'commitment' };
+    return { id: `r${i}`, name: `Role ${i}`, priority: i + 1, targetMin: target, floorMin: r() < 0.7 ? int(0, target / 30) * 30 : 0, kind: r() < 0.5 ? 'life' : 'commitment', ...timeOfDay() };
   });
   const wake = int(5 * 4 + 1, 9 * 4) * 15;
   const sleep = int(21 * 4, 25 * 4 + 2) * 15; // up to 01:30, after midnight

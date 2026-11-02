@@ -5,6 +5,7 @@ import { handlers } from '/core/handlers.js';
 import { replan, applyEvent } from '/core/planner.js';
 import { checkPlan } from '/core/invariants.js';
 import { deadlineRadar } from '/core/radar.js';
+import { starterWeek } from '/core/setup.js';
 import { T } from '/js/strings.js';
 import { planDiff, isEmptyDiff } from '/core/diff.js';
 import { shareWeek } from '/js/picture.js';
@@ -933,16 +934,18 @@ function showAnswer(data) {
   $('answer').innerHTML = `<div class="ai-head"><img src="/icon.svg" alt="">Mesocycle</div><p class="reply">${esc(data.reply)}</p>${data.receipt || ''}` +
     (both.length ? `<p class="hint">${t('eitherWay')}: ${esc(both.map(title).join(', '))}</p>` : '') +
     (p ? p.options.map((o, i) => `<div class="option ${o.by || ''}">
-      <div class="row" style="justify-content:space-between"><strong>${t('guardian')[o.by] || (i === 0 ? t('suggested') : t('or'))}</strong>${o.suggested && !p.agreed ? `<span class="chip">${t('suggested')}</span>` : ''}</div>
+      <div class="row" style="justify-content:space-between"><strong>${p.confirm ? t('confirmSkip') : t('guardian')[o.by] || (i === 0 ? t('suggested') : t('or'))}</strong>${o.suggested && !p.agreed ? `<span class="chip">${t('suggested')}</span>` : ''}</div>
       ${o.why ? `<p style="margin:6px 0 0">${esc(o.why)}</p>` : ''}
       <p style="margin:8px 0 0;font-size:14px"><b>${t('keeps')}:</b> ${esc(keptToday(o.ids).join(', ')) || '-'}</p>
       <p class="hint" style="margin:4px 0 8px"><b>${t('moveToDebt')}:</b> ${esc(o.ids.filter((id) => !both.includes(id)).map(title).join(', ')) || '-'}</p>
-      <button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button></div>`).join('') : '') +
+      <div class="row"><button class="${i === 0 ? 'primary' : ''}" data-opt="${i}">${t('approve')}</button>${p.confirm ? `<button id="keep-all">${t('keepAll')}</button>` : ''}</div></div>`).join('') : '') +
     `<details style="margin-top:12px" ${data.trace.some((s) => !s.ok) ? 'open' : ''}><summary>${t('steps')} (${data.trace.length})</summary>
       <ol class="steps">${data.trace.map(stepHtml).join('')}</ol><p class="hint">${t('stepsHint')}</p></details>`;
   // The answer is the point of the turn, so it comes to the person.
   $('answer').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if ($('undo')) $('undo').onclick = undo;
+  // Asked before dropping several items: keeping them changes nothing.
+  if (p?.confirm) $('keep-all').onclick = () => { pendingProposal = null; $('answer').innerHTML = `<p class="reply muted">${t('keptAll')}</p>`; };
   if (p) $('answer').querySelectorAll('[data-opt]').forEach((b) => {
     b.onclick = async () => {
       const { ids } = p.options[Number(b.dataset.opt)];
@@ -1051,10 +1054,21 @@ $('setup-go').onclick = async () => {
     apply(data);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
-    $('setup-status').textContent = e.message;
+    $('setup-status').textContent = `${e.message} ${t('handAfterFail')}`;
   } finally {
     $('setup-go').disabled = false;
   }
+};
+
+// No AI needed: a plain week opens in the editors, to change by hand.
+$('setup-hand').onclick = async () => {
+  $('setup').hidden = true; $('setup-status').textContent = '';
+  await useWeek({ ...starterWeek(lang), history: template?.sample ? [] : template?.history || [] });
+  showTab('week');
+  const roles = $('ed-roles').closest('details');
+  roles.open = true;
+  $('ed-tasks').closest('details').open = true;
+  roles.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 // Real mode follows the real clock; a new day is built from the template.

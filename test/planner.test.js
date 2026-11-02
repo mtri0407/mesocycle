@@ -137,3 +137,24 @@ test('a messy day keeps every promise', () => {
     assert.deepEqual(checkPlan(s, replan(s), fixed), []);
   }
 });
+
+// Found by the simulator: with a time of day, keeping more work moved a block
+// and opened room for work set aside earlier. It must get another try.
+test('a time of day keeps work inside it, and set-aside work gets another try', () => {
+  const state = {"now":533,"settings":{"wake":480,"sleep":1380,"fillRatio":1,"bufferMin":10},"roles":[{"id":"study","priority":1,"floorMin":600},{"id":"work","priority":2,"floorMin":300,"window":{"from":"12:00","to":"14:00"}},{"id":"health","priority":3,"floorMin":270},{"id":"people","priority":4,"floorMin":240},{"id":"clubs","priority":5,"window":{"from":"10:00","to":"12:00"}}],"week":{"study":{"done":307,"futureBudget":69,"laterMin":248},"work":{"done":181,"futureBudget":189,"laterMin":0},"health":{"done":90,"futureBudget":42,"laterMin":139},"people":{"done":337,"futureBudget":10,"laterMin":72},"clubs":{"done":137,"futureBudget":38,"laterMin":98}},"fixed":[],"queue":[{"id":"q-0","roleId":"health","minutes":20,"rank":"extra","status":"todo"},{"id":"q-1","roleId":"study","minutes":120,"rank":2,"status":"todo"},{"id":"q-2","roleId":"study","minutes":90,"rank":1,"status":"todo"},{"id":"q-3","roleId":"people","minutes":30,"rank":"extra","status":"todo"},{"id":"q-4","roleId":"work","minutes":120,"rank":2,"status":"todo"},{"id":"q-5","roleId":"work","minutes":20,"rank":1,"status":"todo"},{"id":"q-6","roleId":"people","minutes":60,"rank":3,"status":"todo"},{"id":"q-7","roleId":"clubs","minutes":45,"rank":1,"status":"todo"}]};
+  const plan = replan(state);
+  assert.deepEqual(checkPlan(state, plan), []);
+  for (const p of plan.placed.filter((x) => x.roleId === 'work')) assert.ok(p.start >= 720 && p.end <= 840);
+  for (const p of plan.placed.filter((x) => x.roleId === 'clubs')) assert.ok(p.start >= 600 && p.end <= 720);
+});
+
+test('the gym keeps to the evening when an earlier block is dropped', () => {
+  const roles = [{ id: 'study', priority: 1 }, { id: 'gym', priority: 2, window: { from: '16:00', to: '21:00' } }];
+  const base = { now: 480, settings: { wake: 420, sleep: 1380, fillRatio: 1, bufferMin: 0 }, roles, week: {}, fixed: [],
+    queue: [{ id: 'a', roleId: 'study', minutes: 120, rank: 1, status: 'todo' }, { id: 'g', roleId: 'gym', minutes: 60, rank: 2, status: 'todo' }] };
+  const gym = (s) => replan(s).placed.find((p) => p.id === 'g');
+  assert.equal(gym(base).start, 960);
+  assert.equal(gym(applyEvent(base, { type: 'skip', id: 'a' })).start, 960);
+  // Without a time of day, it moves up to the morning, as before.
+  assert.equal(replan(applyEvent({ ...base, roles: roles.map(({ window, ...r }) => r) }, { type: 'skip', id: 'a' })).placed[0].start, 480);
+});

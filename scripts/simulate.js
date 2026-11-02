@@ -28,6 +28,20 @@ const ROLES = [
   { id: 'clubs', priority: 5 },
 ];
 
+// Some days some roles keep a time of day (gym only in the evening). A second
+// generator decides it, so the days themselves stay the same as before.
+const rw = rng(SEED + 1);
+const hhmm = (m) => toHHMM(m);
+function withTimeOfDay(roles) {
+  if (rw() >= 0.4) return roles;
+  return roles.map((role) => {
+    if (rw() >= 0.35) return role;
+    const from = (6 + Math.floor(rw() * 14)) * 60;
+    const to = Math.min(24 * 60 - 15, from + (2 + Math.floor(rw() * 8)) * 60);
+    return { ...role, window: { from: hhmm(from), to: hhmm(to) } };
+  });
+}
+
 function makeDay(r) {
   const pick = (xs) => xs[Math.floor(r() * xs.length)];
   const int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
@@ -47,7 +61,7 @@ function makeDay(r) {
   return {
     now: wake + int(0, 180),
     settings: { wake, sleep, fillRatio: pick([0.5, 0.6, 0.7, 1]), bufferMin: pick([0, 10, 15, 20]) },
-    roles: ROLES,
+    roles: withTimeOfDay(ROLES),
     week,
     fixed,
     queue,

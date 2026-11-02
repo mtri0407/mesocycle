@@ -1,6 +1,6 @@
 // The promises Mesocycle makes, written as checks. The simulator runs them
 // after every re-plan; any broken promise is a bug in the planner.
-import { DEFAULT_SETTINGS, freeWindows, layout, baseMinutes } from './planner.js';
+import { DEFAULT_SETTINGS, freeWindows, layout, baseMinutes, roleWindows } from './planner.js';
 
 export function checkPlan(state, result, originalFixed = state.fixed) {
   const errors = [];
@@ -8,8 +8,11 @@ export function checkPlan(state, result, originalFixed = state.fixed) {
   const todo = state.queue.filter((i) => i.status === 'todo');
   const placed = [...result.placed].sort((a, b) => a.start - b.start);
 
-  // 1. Sleep is untouched and nothing starts in the past.
+  // 1. Sleep is untouched and nothing starts in the past. Work stays inside its role's time of day.
+  const timeOfDay = roleWindows(state.roles);
   for (const p of placed) {
+    const win = timeOfDay[p.roleId];
+    if (win && (p.start < win[0] || p.end > win[1])) errors.push(`time of day: ${p.id} outside ${win}`);
     if (p.end > settings.sleep) errors.push(`sleep: ${p.id} ends at ${p.end} after sleep ${settings.sleep}`);
     if (p.start < settings.wake) errors.push(`wake: ${p.id} starts before wake`);
     if (p.start < state.now) errors.push(`past: ${p.id} starts before now`);
@@ -51,7 +54,7 @@ export function checkPlan(state, result, originalFixed = state.fixed) {
   for (const id of result.cuts) {
     const it = todo.find((x) => x.id === id);
     const trial = todo.filter((x) => x === it || placedIds.has(x.id));
-    if (layout(trial, windows, settings, result.budgetMin).overflow.length === 0) {
+    if (layout(trial, windows, settings, result.budgetMin, timeOfDay).overflow.length === 0) {
       errors.push(`needless cut: ${id} still fits`);
     }
   }

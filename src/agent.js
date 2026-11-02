@@ -50,12 +50,16 @@ export const noDashes = (s) => s.replace(DASHES, ', ');
 
 const MAX_STEPS = 8;       // model calls per user message
 const MAX_REJECTIONS = 3;  // first try + 2 retries
+// One item dropped is a slip and happens at once. More than that in one turn
+// is a cut, and nothing is cut without the person's OK, whoever asked for it.
+const SKIP_WITHOUT_ASKING = 1;
+const isSkip = (c) => c.name === 'update_item' && c.args?.status === 'skipped';
 
 // What is said when the loop has to stop by itself. These come from code, so
 // they are not in the person's language unless they are written here.
 const STOPPED = {
-  en: { rejections: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', steps: 'That took too many steps. Here is the plan as it stands.', silent: 'Here is the plan as it stands.' },
-  vi: { rejections: 'Mình chưa tìm được thay đổi nào hợp lệ. Kế hoạch chỉ đổi đúng những gì đang hiện.', steps: 'Việc này cần quá nhiều bước. Đây là kế hoạch hiện tại.', silent: 'Đây là kế hoạch hiện tại.' },
+  en: { confirm: (n) => `Skip these ${n} and keep them as debt? Nothing is skipped until you say so.`, held: 'Not done yet: dropping several items at once needs the person\'s OK. The app is asking them now; do not call more tools.', rejections: 'I could not find a valid change for that. Nothing was modified beyond what is shown.', steps: 'That took too many steps. Here is the plan as it stands.', silent: 'Here is the plan as it stands.' },
+  vi: { confirm: (n) => `Bỏ ${n} việc này và giữ thành nợ nhé? Chưa việc nào bị bỏ cho tới khi bạn đồng ý.`, held: 'Not done yet: dropping several items at once needs the person\'s OK. The app is asking them now; do not call more tools.', rejections: 'Mình chưa tìm được thay đổi nào hợp lệ. Kế hoạch chỉ đổi đúng những gì đang hiện.', steps: 'Việc này cần quá nhiều bước. Đây là kế hoạch hiện tại.', silent: 'Đây là kế hoạch hiện tại.' },
 };
 
 // chatFn(messages, tools) -> { text, toolCalls, message }. Injected so tests
@@ -89,6 +93,7 @@ ${JSON.stringify(forModel(plan))}`;
   const tools = [...TOOLS, ...(template ? WEEK_TOOLS : []), ...(pending ? [ACCEPT_TOOL] : [])];
   let changedWeek = false;
   let changedDay = false;
+  let skipped = []; // ids dropped this turn
   const finish = (out) => (changedWeek ? { ...out, template } : out);
   const adopt = (res) => {
     if (res.proposal) proposal = { ...res.proposal, options: res.proposal.options.map((o) => (o.ids ? o : { ids: o, by: 'code', why: '' })) };
@@ -134,9 +139,21 @@ ${JSON.stringify(forModel(plan))}`;
     }
 
     messages.push({ role: 'assistant', content: out.message?.content ?? '', tool_calls: out.message?.tool_calls });
+    // Too many drops at once: code holds them all and asks the person instead.
+    const hold = skipped.length + out.toolCalls.filter(isSkip).length > SKIP_WITHOUT_ASKING;
+    // An item dropped earlier this turn waits too: it is back in the day until the person answers.
+    const held = hold ? [...skipped] : [];
+    if (hold && skipped.length) {
+      state = { ...state, queue: state.queue.map((q) => (skipped.includes(q.id) && q.status === 'skipped' ? { ...q, status: 'todo' } : q)) };
+      skipped = [];
+    }
     for (const call of out.toolCalls) {
       let res;
-      if (template && WEEK_TOOL_NAMES.has(call.name)) {
+      if (hold && isSkip(call)) {
+        const ok = state.queue.some((q) => q.id === call.args?.id && q.status === 'todo');
+        if (ok && !held.includes(call.args.id)) held.push(call.args.id);
+        res = ok ? { ok: true, state, result: { held: said.held } } : { ok: false, error: `No open item with id "${call.args?.id}". Use ids from get_state.`, state };
+      } else if (template && WEEK_TOOL_NAMES.has(call.name)) {
         res = { ...runWeekTool(template, call.name, call.args, { today: state.date }), state };
         if (res.ok) {
           template = res.template;
@@ -156,7 +173,8 @@ ${JSON.stringify(forModel(plan))}`;
       if (res.ok) {
         state = res.state;
         adopt(res);
-        if (call.name !== 'get_state' && call.name !== 'propose') changedDay = true;
+        if (isSkip(call) && !hold) skipped.push(call.args.id);
+        if (call.name !== 'get_state' && call.name !== 'propose' && !(hold && isSkip(call))) changedDay = true;
       } else {
         rejections++;
       }
@@ -165,6 +183,11 @@ ${JSON.stringify(forModel(plan))}`;
         tool_call_id: call.id,
         content: JSON.stringify(res.ok ? (res.result?.cutOptions ? forModel(res.result) : res.result) : { error: res.error }),
       });
+    }
+    if (held.length && !proposal) {
+      const message = said.confirm(held.length);
+      proposal = { message, options: [{ ids: held, by: 'code', why: '' }], confirm: true };
+      trace.push({ tool: 'propose', ok: true });
     }
     if (councilFn && changedDay && !proposal && replan(state).needsUser) startCouncil();
     // A proposal ends the turn: its message is the answer, so one more model

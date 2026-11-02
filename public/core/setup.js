@@ -13,7 +13,9 @@ by calling build_week exactly once.
   want to drop below (default about half of weeklyHours; for family and
   friends at least 2 hours if they mention them). kind = "life" for health,
   training, rest, family, friends and hobbies, "commitment" for study, work
-  and anything owed to someone else.
+  and anything owed to someone else. from and to: only when they say a
+  role happens at a certain time of day ("gym in the evening", "calls after
+  8pm"), as HH:MM; otherwise leave them out.
 - fixed: things with a set time each week (classes, shifts, practice).
   days use 0=Sunday ... 6=Saturday. Read times from the photo if there is one.
 - tasks: flexible work as blocks of 30 to 120 minutes, enough blocks to
@@ -37,6 +39,7 @@ export const BUILD_WEEK = {
       properties: {
         roles: { type: 'array', items: { type: 'object', properties: {
           name: { type: 'string' }, priority: { type: 'integer' }, weeklyHours: { type: 'number' }, floorHours: { type: 'number' }, kind: { type: 'string', enum: ['commitment', 'life'] },
+          from: { type: 'string', description: 'HH:MM, only if this role keeps to a time of day' }, to: { type: 'string', description: 'HH:MM' },
         }, required: ['name', 'priority', 'weeklyHours', 'floorHours'] } },
         fixed: { type: 'array', items: { type: 'object', properties: {
           title: { type: 'string' }, days: { type: 'array', items: { type: 'integer' } }, start: { type: 'string' }, end: { type: 'string' },
@@ -60,6 +63,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // House style: no em or en dashes in names the user reads.
 const DASHES = new RegExp('\\s*[' + String.fromCharCode(0x2013, 0x2014) + ']\\s*', 'g');
 const clean = (s, fallback) => String(s || fallback).replace(DASHES, ': ').trim();
+// A role's time of day: both ends, at least 30 minutes, within one day.
+const windowOk = (from, to) => HHMM.test(from || '') && HHMM.test(to || '') && toMin(to) - toMin(from) >= 30;
 
 // Checks the model's build_week arguments. Returns { template } or { errors }.
 export function validateWeek(a) {
@@ -72,6 +77,7 @@ export function validateWeek(a) {
     if (typeof r?.name !== 'string' || !r.name.trim()) errors.push(`roles[${i}].name is required.`);
     if (!(r?.weeklyHours >= 0 && r.weeklyHours <= 80)) errors.push(`roles[${i}].weeklyHours must be 0 to 80.`);
     if (!(r?.floorHours >= 0 && r.floorHours <= (r?.weeklyHours ?? 0))) errors.push(`roles[${i}].floorHours must be 0 to weeklyHours.`);
+    if ((r?.from || r?.to) && !windowOk(r.from, r.to)) errors.push(`roles[${i}]: from and to must be HH:MM, to at least 30 minutes after from.`);
     if (r?.name) byName.set(r.name.trim().toLowerCase(), `r${i + 1}`);
   });
   const fixed = Array.isArray(a.fixed) ? a.fixed : [];
@@ -99,7 +105,7 @@ export function validateWeek(a) {
 
   return {
     template: {
-      roles: roles.map((r, i) => ({ id: `r${i + 1}`, name: clean(r.name), priority: r.priority || i + 1, targetMin: Math.round(r.weeklyHours * 60), floorMin: Math.round(r.floorHours * 60), kind: r.kind === 'life' ? 'life' : 'commitment' })),
+      roles: roles.map((r, i) => ({ id: `r${i + 1}`, name: clean(r.name), priority: r.priority || i + 1, targetMin: Math.round(r.weeklyHours * 60), floorMin: Math.round(r.floorHours * 60), kind: r.kind === 'life' ? 'life' : 'commitment', ...(r.from && r.to ? { window: { from: r.from, to: r.to } } : {}) })),
       fixed: fixed.map((f, i) => ({ id: `f${i + 1}`, title: clean(f.title, 'Fixed'), days: f.days, start: f.start, end: f.end })),
       tasks: tasks.map((t, i) => ({
         id: `t${i + 1}`, title: clean(t.title, 'Task'), roleId: byName.get(t.role.trim().toLowerCase()),
@@ -460,6 +466,7 @@ export function checkTemplate(t, lang = 'en') {
     if (!String(r.name || '').trim()) errors.push(m('Every role needs a name.', 'Vai trò nào cũng cần tên.'));
     if (!(r.targetMin >= 0 && r.targetMin <= 4800)) errors.push(m(`${r.name}: weekly hours must be 0 to 80.`, `${r.name}: giờ mỗi tuần phải từ 0 đến 80.`));
     if (!(r.floorMin >= 0 && r.floorMin <= r.targetMin)) errors.push(m(`${r.name}: the minimum cannot be more than the target.`, `${r.name}: mức tối thiểu không được lớn hơn mục tiêu giờ.`));
+    if (r.window && !windowOk(r.window.from, r.window.to)) errors.push(m(`${r.name}: the time of day needs a start and an end at least 30 minutes later.`, `${r.name}: khung giờ cần giờ bắt đầu và giờ kết thúc sau đó ít nhất 30 phút.`));
   }
   for (const f of t.fixed || []) {
     if (!String(f.title || '').trim()) errors.push(m('Every fixed event needs a title.', 'Lịch cố định nào cũng cần tên.'));
@@ -501,4 +508,31 @@ export function checkinBrief(t, view, { weekday, date }) {
     debt: debtTasks(t).map((x) => ({ title: x.title, minutes: x.minutes })),
     goals: (t.goals || []).map((g) => ({ title: g.title, behind: pace.get(g.id)?.behind || false, daysLeft: pace.get(g.id)?.daysLeft ?? null })),
   });
+}
+
+// A plain week to fill in by hand, for when the AI cannot build one (or the
+// person would rather type it in). Four common roles and their blocks,
+// all of it editable in the Week tab. Nothing here is sent anywhere.
+const STARTER = {
+  en: { roles: ['Study', 'Work', 'Health', 'Family and friends'], tasks: ['Study block', 'Work block', 'Exercise', 'Call home'] },
+  vi: { roles: ['Học', 'Công việc', 'Sức khoẻ', 'Gia đình và bạn bè'], tasks: ['Block học', 'Block công việc', 'Tập thể dục', 'Gọi về nhà'] },
+};
+export function starterWeek(lang = 'en') {
+  const w = STARTER[lang === 'vi' ? 'vi' : 'en'];
+  const hours = [[15, 8], [10, 5], [4, 2], [3, 2]];
+  const minutes = [90, 60, 60, 30];
+  return {
+    roles: w.roles.map((name, i) => ({ id: `r${i + 1}`, name, priority: i + 1, targetMin: hours[i][0] * 60, floorMin: hours[i][1] * 60, kind: i < 2 ? 'commitment' : 'life' })),
+    fixed: [],
+    // Enough blocks to cover each role's weekly hours, so every day gets its share.
+    tasks: w.tasks.flatMap((title, r) => {
+      const n = Math.ceil((hours[r][0] * 60) / minutes[r]);
+      return Array.from({ length: n }, (_, i) => ({ title: `${title} ${i + 1}`, roleId: `r${r + 1}`, minutes: minutes[r], rank: Math.min(3, 1 + Math.floor((i * 3) / n)), deadline: null, status: 'todo' }));
+    }).map((x, i) => ({ id: `t${i + 1}`, ...x })),
+    goals: [],
+    wake: '07:00',
+    sleep: '23:00',
+    history: [], done: {}, actuals: [], log: [],
+    byHand: true,
+  };
 }

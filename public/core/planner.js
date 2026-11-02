@@ -50,10 +50,28 @@ export function freeWindows(now, fixed, settings) {
   return out;
 }
 
-function firstFit(windows, cursor, len) {
+// A role can keep its work inside a time of day (gym only from 16:00 to
+// 21:00). Returns { roleId: [from, to] } in minutes, for roles that have one.
+export function roleWindows(roles = []) {
+  const out = {};
+  for (const r of roles) {
+    if (r.window?.from && r.window?.to && toMin(r.window.to) > toMin(r.window.from)) out[r.id] = [toMin(r.window.from), toMin(r.window.to)];
+  }
+  return out;
+}
+
+// Earliest start >= lo where len fits before hi, outside every taken block.
+// A block placed before another keeps the buffer between them.
+function firstFit(windows, lo, len, hi, taken, buffer) {
   for (const [a, b] of windows) {
-    const s = Math.max(a, cursor);
-    if (s + len <= b) return s;
+    let s = Math.max(a, lo);
+    for (;;) {
+      const end = Math.min(b, hi);
+      if (s + len > end) break;
+      const hit = taken.find(([ts, te]) => s < te + buffer && ts < s + len + (s + len < b ? buffer : 0));
+      if (!hit) return s;
+      s = hit[1] + buffer;
+    }
   }
   return null;
 }
@@ -61,21 +79,30 @@ function firstFit(windows, cursor, len) {
 // Lay items out in queue order. Times are estimates that slide when reality
 // changes; only fixed events have hard times. An item that does not fit is
 // left out, later items may still use the space (relative order is kept).
-export function layout(items, windows, settings, budgetMin = Infinity) {
+// Work of a role with a time of day goes in the first free spot inside it and
+// does not hold up the rest of the queue; without such roles this is plain
+// queue order.
+export function layout(items, windows, settings, budgetMin = Infinity, timeOfDay = {}) {
   const placed = [];
   const overflow = [];
+  const taken = [];
   let cursor = windows.length ? windows[0][0] : 0;
   let used = 0;
   for (const it of items) {
-    const s = used + it.minutes > budgetMin ? null : firstFit(windows, cursor, it.minutes);
+    const win = timeOfDay[it.roleId];
+    const s = used + it.minutes > budgetMin ? null
+      : win ? firstFit(windows, win[0], it.minutes, win[1], taken, settings.bufferMin)
+        : firstFit(windows, cursor, it.minutes, Infinity, taken, settings.bufferMin);
     if (s === null) {
       overflow.push(it);
       continue;
     }
     placed.push({ id: it.id, roleId: it.roleId, start: s, end: s + it.minutes });
-    cursor = s + it.minutes + settings.bufferMin;
+    taken.push([s, s + it.minutes]);
+    if (!win) cursor = s + it.minutes + settings.bufferMin;
     used += it.minutes;
   }
+  placed.sort((x, y) => x.start - y.start);
   return { placed, overflow, used };
 }
 
@@ -123,6 +150,7 @@ export function replan(state) {
   const freeMin = windows.reduce((sum, [a, b]) => sum + b - a, 0);
   const budgetMin = Math.floor(freeMin * settings.fillRatio);
   const todo = state.queue.filter((i) => i.status === 'todo');
+  const timeOfDay = roleWindows(roles);
 
   // Greedy by priority: an item is kept only if everything kept so far
   // still fits with it. So a lower-priority item never pushes out a higher one.
@@ -130,10 +158,19 @@ export function replan(state) {
   const cuts = [];
   for (const it of keepOrder(todo, roles, state.week)) {
     const trial = todo.filter((x) => x === it || kept.includes(x));
-    if (layout(trial, windows, settings, budgetMin).overflow.length === 0) kept = trial;
+    if (layout(trial, windows, settings, budgetMin, timeOfDay).overflow.length === 0) kept = trial;
     else cuts.push(it);
   }
-  const { placed, used } = layout(kept, windows, settings, budgetMin);
+  // With a time of day, keeping more work can move a block and open room for one
+  // set aside earlier, so set-aside work gets another try until nothing changes.
+  for (let again = cuts.length > 0 && Object.keys(timeOfDay).length > 0; again;) {
+    again = false;
+    for (const it of [...cuts]) {
+      const trial = todo.filter((x) => x === it || kept.includes(x));
+      if (layout(trial, windows, settings, budgetMin, timeOfDay).overflow.length === 0) { kept = trial; cuts.splice(cuts.indexOf(it), 1); again = true; }
+    }
+  }
+  const { placed, used } = layout(kept, windows, settings, budgetMin, timeOfDay);
 
   // Never go below a floor silently: report every role a cut would push under it.
   const floorBreaches = roles

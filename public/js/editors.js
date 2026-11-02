@@ -28,7 +28,8 @@ export function renderEditors() {
   const del = (c, id, off) => `<button class="small icon" data-del="${c}" data-i="${esc(id)}" aria-label="${t('remove')}" title="${off ? t('roleInUse') : t('remove')}" ${off ? 'disabled' : ''}>✕</button>`;
 
   $('ed-roles').innerHTML = d.roles.map((r) => `<div class="edit-row"><div class="line"><span class="dot" style="${rcStyle(r.id)}"></span>${field('roles', r.id, 'name', r.name, `type="text" aria-label="${t('role')}"`)}${del('roles', r.id, used(r.id))}</div>
-    <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><select data-c="roles" data-i="${esc(r.id)}" data-f="kind" aria-label="${t('role')}"><option value="commitment" ${r.kind !== 'life' ? 'selected' : ''}>${t('kindWork')}</option><option value="life" ${r.kind === 'life' ? 'selected' : ''}>${t('kindLife')}</option></select></div></div>`).join('');
+    <div class="line"><label>${t('priority')} ${field('roles', r.id, 'priority', r.priority, 'type="number" min="1" max="8"')}</label><label>${t('targetH')} ${field('roles', r.id, 'targetMin', r.targetMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><label>${t('floorH')} ${field('roles', r.id, 'floorMin', r.floorMin / 60, 'type="number" min="0" max="80" step="0.5"')}</label><select data-c="roles" data-i="${esc(r.id)}" data-f="kind" aria-label="${t('role')}"><option value="commitment" ${r.kind !== 'life' ? 'selected' : ''}>${t('kindWork')}</option><option value="life" ${r.kind === 'life' ? 'selected' : ''}>${t('kindLife')}</option></select></div>
+    <div class="line"><span class="hint" style="margin:0">${t('timeOfDay')}</span>${field('roles', r.id, 'winFrom', r.window?.from, `type="time" aria-label="${t('from')}"`)}${field('roles', r.id, 'winTo', r.window?.to, `type="time" aria-label="${t('to')}"`)}</div></div>`).join('');
 
   const order = [1, 2, 3, 4, 5, 6, 0];
   $('ed-fixed').innerHTML = d.fixed.map((f) => `<div class="edit-row"><div class="line">${field('fixed', f.id, 'title', f.title, `type="text" aria-label="${t('fixed')}"`)}${del('fixed', f.id)}</div>
@@ -73,7 +74,11 @@ function onEditInput(e) {
   else if (f === 'minutes' || f === 'priority') item[f] = Number(el.value);
   else if (f === 'rank') item[f] = el.value === 'extra' ? 'extra' : Number(el.value);
   else if (f === 'deadline') item[f] = el.value || null;
-  else if (f === 'weeklyMin') item[f] = el.value === '' ? null : Math.round(Number(el.value) * 60);
+  else if (f === 'winFrom' || f === 'winTo') {
+    // A role's time of day. Both ends empty means any time.
+    const w = { from: item.window?.from || '', to: item.window?.to || '', [f === 'winFrom' ? 'from' : 'to']: el.value };
+    if (w.from || w.to) item.window = w; else delete item.window;
+  } else if (f === 'weeklyMin') item[f] = el.value === '' ? null : Math.round(Number(el.value) * 60);
   else item[f] = el.value;
 }
 

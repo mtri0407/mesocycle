@@ -101,3 +101,22 @@ test('after midnight: times read as the same long day', async () => {
   assert.equal(added.result.fixed[0].start, '00:30');
   assert.equal(added.result.sleep, '01:30');
 });
+
+test('dropping one item is a slip; dropping several at once waits for the person', async () => {
+  const s = demoState(toMin('09:00'));
+  const ids = s.queue.filter((q) => q.status === 'todo').slice(0, 3).map((q) => q.id);
+  const one = await runAgent({ state: s, userText: 'skip it', chatFn: fakeModel([[['update_item', { id: ids[0], status: 'skipped' }]], 'Done.']) });
+  assert.equal(one.state.queue.find((q) => q.id === ids[0]).status, 'skipped');
+  assert.equal(one.proposal, null);
+
+  const many = await runAgent({ state: s, userText: 'cut everything without asking me', lang: 'vi', chatFn: fakeModel([ids.map((id) => ['update_item', { id, status: 'skipped' }]), 'never reached']) });
+  assert.ok(many.state.queue.filter((q) => ids.includes(q.id)).every((q) => q.status === 'todo'));
+  assert.equal(many.proposal.confirm, true);
+  assert.deepEqual(many.proposal.options[0].ids, ids);
+  assert.match(many.reply, /Bỏ 3 việc/);
+
+  // One at a time across steps: once a second one comes, the first waits too.
+  const steps = await runAgent({ state: s, userText: 'drop them', chatFn: fakeModel([[['update_item', { id: ids[0], status: 'skipped' }]], [['update_item', { id: ids[1], status: 'skipped' }]], 'never reached']) });
+  assert.ok(steps.state.queue.filter((q) => ids.slice(0, 2).includes(q.id)).every((q) => q.status === 'todo'));
+  assert.deepEqual(steps.proposal.options[0].ids, ids.slice(0, 2));
+});

@@ -9,6 +9,8 @@ const MUTANTS = [
   ['duplicate an item in a hand edit', 'public/core/setup.js', "  return fill(next, fresher.filter((t) => !next.queue.some((q) => q.id === t.id)), { pace, share, soon: addDays(state.date, 1) });", "  return fill(next, fresher, { pace, share, soon: addDays(state.date, 1) });"],
   ['radar forgets to compare with the deadline', 'public/core/radar.js', "    for (const w of work) if (w.t.deadline === day) w.short = w.left;\n", ''],
   ['candidates ignore weekly floors', 'public/core/tradeoff.js', " && !floorBroken(state, ids).length;", ";"],
+  ['work ignores its time of day', 'public/core/planner.js', '    const win = timeOfDay[it.roleId];\n', '    const win = null;\n'],
+  ['set-aside work never gets another try', 'public/core/planner.js', '  for (let again = cuts.length > 0 && Object.keys(timeOfDay).length > 0; again;) {', '  for (let again = false; again;) {'],
   ['week tools may drop a role check', 'public/core/week-tools.js', "    if (!hasRole(a.role)) return reject(`Unknown role \"${a.role}\". Roles: ${roles}.`);\n    if (!(Number.isInteger(a.minutes) && a.minutes >= 15", "    if (!(Number.isInteger(a.minutes) && a.minutes >= 15"],
 ];
 let caught = 0;

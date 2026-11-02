@@ -117,6 +117,12 @@ Times measured on the live app for this scenario: the plan changes after about 2
 
 **A phase sets hours once.** When a phase begins, its hours become the weekly target of the goal's role, and the phase is marked. A target the person changes afterwards stays theirs, and a next week the person approved wins over a phase starting the same week.
 
+**A time of day bends the queue, not the rules.** A role can keep its work inside a time of day. Its blocks take the first free spot inside that window and do not hold up the rest of the queue; without such roles the layout is exactly the old queue order. Because keeping more work can now move a block, work set aside gets another try until nothing changes, so a cut is still only proposed when it truly does not fit. The window is checked with the other promises after every change.
+
+**Dropping several items is a cut.** One item dropped ("no gym today") is a slip and happens at once. Two or more in one turn are held by code, and the person gets one card to approve or keep them, even when they said "without asking". A stricter evaluation found that both models would otherwise clear the whole day on that sentence. It also covers a fooled model.
+
+**A week by hand needs no AI.** If the AI cannot build a week, or the person would rather type, a plain week with four common roles opens in the editors. It passes the same checks as any hand edit.
+
 **A new day is not an edit.** Rolling over keeps the time of the last real change. Otherwise simply opening an old device each morning would make its copy look newest.
 
 ## When a provider fails

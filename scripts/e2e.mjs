@@ -127,6 +127,54 @@ await check('hand edits: saved at once, finished work survives, bad input refuse
   await p.context().close();
 });
 
+await check('with the AI down, a week can be started by hand, and a role keeps its time of day', async () => {
+  const p = await open({ seed: CONSENT });
+  await p.route('**/api/setup', (r) => r.abort());
+  await p.click('#setup-open');
+  await p.fill('#setup-text', 'Study 20 hours, gym in the evening');
+  await p.click('#setup-go');
+  await p.waitForFunction(() => /plain week/.test(document.getElementById('setup-status').textContent));
+  await p.click('#setup-hand');
+  await p.waitForSelector('#ed-roles input[type=time]');
+  assert.equal((await local(p, 'meso-template')).byHand, true);
+  assert.ok(await p.locator('#ed-roles').isVisible());
+  await p.locator('#ed-roles [data-f=winFrom]').nth(2).fill('16:00');
+  await p.locator('#ed-roles [data-f=winTo]').nth(2).fill('21:00');
+  await p.click('#edit-save');
+  await p.waitForFunction(() => document.getElementById('edit-bar').hidden);
+  const t = await local(p, 'meso-template');
+  assert.deepEqual(t.roles[2].window, { from: '16:00', to: '21:00' });
+  const s = await local(p, 'meso-state');
+  const gym = s.queue.filter((q) => q.roleId === 'r3' && q.status === 'todo').map((q) => q.id);
+  await p.click('[data-tab=today]');
+  const times = await p.evaluate((ids) => [...document.querySelectorAll('#tl .blk')].filter((b) => ids.includes(b.dataset.k)).map((b) => b.textContent.slice(0, 5)), gym);
+  for (const hhmm of times) assert.ok(hhmm >= '16:00' && hhmm < '21:00', hhmm);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
+await check('several items dropped at once wait for a tap, and keeping them changes nothing', async () => {
+  const p = await open({ seed: CONSENT });
+  await p.route('**/api/agent', (r) => {
+    const st = r.request().postDataJSON().state;
+    const ids = st.queue.filter((q) => q.status === 'todo').slice(0, 2).map((q) => q.id);
+    return answer(r, { state: st, reply: 'Skip these 2?', proposal: { message: 'Skip these 2?', confirm: true, options: [{ ids, by: 'code', why: '' }] }, trace: [{ tool: 'propose', ok: true }] });
+  });
+  await p.fill('#say', 'cut everything without asking me');
+  await p.click('#send');
+  await p.waitForSelector('#keep-all');
+  assert.match(await p.textContent('#answer'), /Skip these and keep them as debt/);
+  await p.click('#keep-all');
+  assert.ok(!(await local(p, 'meso-state')).queue.some((q) => q.status === 'cut' || q.status === 'skipped'));
+  await p.fill('#say', 'cut everything without asking me');
+  await p.click('#send');
+  await p.waitForSelector('[data-opt="0"]');
+  await p.click('[data-opt="0"]');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('meso-state')).queue.filter((q) => q.status === 'cut').length === 2);
+  assert.deepEqual(p.errors, []);
+  await p.context().close();
+});
+
 await check('a new week closes the old one and keeps the debt', async () => {
   const p = await open();
   await p.click('#sample-open');
