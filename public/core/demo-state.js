@@ -1,5 +1,7 @@
-// A real day from the author's midterm week (Friday, 30 Oct 2026), used for
-// the demo. Course names are real; nothing private beyond that.
+// Based on a real day from the author's midterm week (Friday, 30 Oct 2026),
+// used for the demo. Course names are real; nothing private beyond that. The
+// gym block is shortened to 60 minutes so the evening comes down to one clear
+// choice: another study block, or the gym and the call home.
 const VI = {
   roles: { gpa: 'Đại học (GPA)', company: 'Greysteel Education', health: 'Tập luyện', project: 'Dự án hackathon', clubs: 'CLB', people: 'Gia đình và bạn bè' },
   queue: {
@@ -53,7 +55,7 @@ function baseDay(nowMin) {
     queue: [
       { id: 'q-1', title: 'Calculus block 1: derivatives part 2', roleId: 'gpa', minutes: 90, rank: 1, status: 'todo' },
       { id: 'q-2', title: 'Calculus block 2: derivatives part 3', roleId: 'gpa', minutes: 90, rank: 2, status: 'todo' },
-      { id: 'q-3', title: 'Gym', roleId: 'health', minutes: 90, rank: 2, status: 'todo' },
+      { id: 'q-3', title: 'Gym', roleId: 'health', minutes: 60, rank: 2, status: 'todo' },
       { id: 'q-4', title: 'Algebra block 3: matrices and determinants', roleId: 'gpa', minutes: 90, rank: 3, status: 'todo' },
       { id: 'q-5', title: 'Greysteel: reply to leads, check class payments', roleId: 'company', minutes: 45, rank: 2, status: 'todo' },
       { id: 'q-6', title: 'Redo last year\'s algebra paper (40 min) and grade it', roleId: 'gpa', minutes: 50, rank: 'extra', status: 'todo' },

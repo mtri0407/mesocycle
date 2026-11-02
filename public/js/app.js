@@ -778,6 +778,7 @@ async function send(textArg, image = null, opts = {}) {
     pendingProposal = done.proposal || null;
     $('say').value = '';
     showAnswer(done);
+    if (!done.proposal) askHelped();
     $('status').textContent = `${t('took')(((Date.now() - started) / 1000).toFixed(1))}${done.fellBack ? ` · ${t('fellBack')}` : ''}`;
     return done;
   } catch (e) {
@@ -872,8 +873,24 @@ function showAnswer(data) {
       pendingProposal = null;
       count('approve');
       if (!$('demo-cap').hidden) caption('cap4');
+      if (!data.recorded) askHelped();
       $('answer').innerHTML = `<p class="reply muted">${t('approved')}</p><button class="small" id="undo">${t('undo')}</button>`;
       $('undo').onclick = undo;
+    };
+  });
+}
+
+// One tap, once a day, after a re-plan has settled. It is the honest measure of
+// whether this helps, and it carries nothing but the answer.
+function askHelped() {
+  const day = today().date;
+  if (store.get('meso-helped') === day) return;
+  store.set('meso-helped', day);
+  $('answer').insertAdjacentHTML('beforeend', `<div class="row hint" id="helped"><span>${t('helpedQ')}</span><button class="small" data-h="1">${t('yes')}</button><button class="small" data-h="0">${t('no')}</button></div>`);
+  $('helped').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      $('helped').textContent = t('thanks');
+      api('/api/feedback', { helped: b.dataset.h === '1', where: realClock() ? 'week' : 'demo' }).catch(() => {});
     };
   });
 }
@@ -902,6 +919,7 @@ async function playRecording() {
     if (e.type === 'done') {
       apply(e);
       pendingProposal = e.proposal || null;
+      e.recorded = true;
       e.receipt = receiptHtml(before, null, e);
       showAnswer(e);
     }

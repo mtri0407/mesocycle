@@ -211,6 +211,26 @@ await check('the guided demo talks from a bar that stays on screen, and brings t
   assert.ok(top >= 0 && top < 400, `answer at ${top}`);
   await p.click('[data-opt="0"]');
   await p.waitForFunction(() => /Call AI/.test(document.getElementById('demo-cap').textContent));
+  assert.equal(await p.locator('#helped').count(), 0); // a recording is not a real re-plan
+  await p.context().close();
+});
+
+await check('one tap, once a day, after a re-plan has settled', async () => {
+  const p = await open({ seed: CONSENT });
+  const sent = [];
+  await p.route('**/api/feedback', (r) => { sent.push(r.request().postDataJSON()); return r.fulfill({ json: { ok: true } }); });
+  await p.route('**/api/agent', (r) => answer(r, { state: r.request().postDataJSON().state }));
+  await p.fill('#say', 'hello');
+  await p.click('#send');
+  await p.waitForSelector('#helped button');
+  await p.click('#helped [data-h="1"]');
+  await p.waitForFunction(() => /Thank/.test(document.getElementById('helped').textContent));
+  assert.deepEqual(sent, [{ helped: true, where: 'demo' }]);
+  await p.fill('#say', 'again');
+  await p.click('#send');
+  await p.waitForFunction(() => !document.getElementById('send').disabled && !document.getElementById('say').value);
+  await p.waitForTimeout(300);
+  assert.equal(await p.locator('#helped').count(), 0);
   await p.context().close();
 });
 

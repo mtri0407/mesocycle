@@ -161,7 +161,7 @@ const byGroup = ['| Group | Cases | ' + providers.map(name).join(' | ') + ' |', 
 const failed = results.filter((r) => !r.ok);
 const out = `# Evaluation
 
-${CASES.length} scenarios on the real agent and the real models, in English and Vietnamese. Run ${new Date().toISOString().slice(0, 10)}, agent at reasoning effort \`low\`, advisors at \`minimal\`.
+${CASES.length} scenarios on the real agent and the real models, in English and Vietnamese${reps > 1 ? `, each run ${reps} times` : ''}. Run ${new Date().toISOString().slice(0, 10)}, agent at reasoning effort \`low\`, advisors at \`minimal\`.
 
 ${head.concat(summary).join('\n')}
 

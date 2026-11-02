@@ -37,7 +37,7 @@ export const WEEK_TOOL_DEFS = [
   },
   {
     name: 'add_goal',
-    description: 'Add a longer-term goal served by one role.',
+    description: 'Add a longer-term goal served by one role. measure and deadline are optional: add the goal now, and do not ask for them.',
     parameters: {
       type: 'object',
       properties: {

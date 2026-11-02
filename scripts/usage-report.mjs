@@ -22,7 +22,10 @@ for (const key of keys('user:')) {
     for (const r of week.roles) if (r.floorMin) { totals.floorsChecked++; if (r.floorKept) totals.floorsKept++; }
   }
 }
-const notes = keys('2026-').map(read).filter(Boolean);
+const entries = keys('2026-').map(read).filter(Boolean);
+const taps = entries.filter((n) => typeof n.helped === 'boolean');
+const notes = entries.filter((n) => typeof n.helped !== 'boolean');
+const helped = (where) => { const these = taps.filter((n) => n.where === where); return `${these.filter((n) => n.helped).length} of ${these.length}`; };
 const rated = notes.filter((n) => Number.isInteger(n.rating));
 const average = rated.length ? (rated.reduce((s, n) => s + n.rating, 0) / rated.length).toFixed(1) : 'n/a';
 
@@ -32,6 +35,7 @@ console.log('Re-plans:', totals.replans, ' Calls:', totals.calls, ' Proposals ap
 console.log('Hours done:', (totals.doneMin / 60).toFixed(1), ' Hours of debt paid back:', (totals.debtRepaidMin / 60).toFixed(1));
 console.log('Days rescued (re-planned, then work still got done):', totals.rescuedDays);
 console.log('Weeks closed:', totals.weeks, ' Weekly minimums kept:', totals.floorsChecked ? `${totals.floorsKept}/${totals.floorsChecked}` : 'n/a');
+console.log('Said a re-plan helped, on a real week:', helped('week'), ' In the demo:', helped('demo'));
 console.log('Feedback notes:', notes.length, ' Average rating:', average, `(${rated.length} rated)`);
 console.log('\nMay be quoted (the person ticked the box):');
 for (const n of notes.filter((x) => x.quote)) console.log(`- ${n.text}`);

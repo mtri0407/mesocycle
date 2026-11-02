@@ -144,6 +144,15 @@ test('feedback keeps the rating only if valid, and quoting needs an explicit yes
   assert.equal(b.quote, false);
 });
 
+test('one tap keeps yes or no and where, and nothing else', async () => {
+  const store = fakeKv({});
+  const send = (b) => worker.fetch(new Request('http://x/api/feedback', { method: 'POST', body: JSON.stringify(b) }), { FEEDBACK: store }, {});
+  assert.equal((await send({ helped: true, where: 'week', text: 'my private plan', extra: 'x' })).status, 200);
+  await send({ helped: false, where: 'anything else' });
+  const notes = [...store.m.entries()].filter(([k]) => /^\d{4}-/.test(k)).map(([, v]) => JSON.parse(v));
+  assert.deepEqual(notes, [{ helped: true, where: 'week' }, { helped: false, where: 'demo' }]);
+});
+
 test("Meta's restricted territories get no AI, everyone else does", async () => {
   const from = (cf, path = '/api/setup') => {
     const req = new Request(`http://x${path}`, { method: 'POST', body: '{}' });
