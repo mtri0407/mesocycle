@@ -186,6 +186,7 @@ export function applyEvent(state, ev) {
       } else {
         item.spent = (item.spent || 0) + ev.minutes;
         item.minutes = Math.max(15, ev.remaining ?? item.minutes - ev.minutes);
+        item.touched = true; // the length now comes from the person, not from learned pace
       }
       break;
     }

@@ -198,6 +198,46 @@ await check('the guided demo survives the AI being down: a labelled recording pl
   await p.context().close();
 });
 
+await check('the guided demo starts on time: the Now card is never "behind" at 5pm', async () => {
+  let p = await open();
+  await p.route('**/api/agent', (r) => r.abort());
+  await p.click('#try');
+  await p.waitForFunction(() => /17:00/.test(document.getElementById('now-card').textContent));
+  assert.doesNotMatch(await p.textContent('#now-card'), /behind/);
+  await p.context().close();
+  // The same through the filming steps: clock to 17:00, then Reset demo day.
+  p = await open();
+  await p.click('#demo-box summary');
+  await p.fill('#clock', '17:00');
+  await p.dispatchEvent('#clock', 'change');
+  await p.click('#reset');
+  await p.waitForFunction(() => /17:00/.test(document.getElementById('now-card').textContent));
+  assert.doesNotMatch(await p.textContent('#now-card'), /behind/);
+  await p.context().close();
+});
+
+await check('asking for 15 more minutes is not called learned pace', async () => {
+  const p = await open();
+  await p.click('#sample-open');
+  await p.waitForSelector('#sample-bar:not([hidden])');
+  await p.click('#now-card [data-act="more"]');
+  await p.waitForTimeout(300);
+  assert.doesNotMatch(await p.textContent('#now-card'), /really takes you|usually take/);
+  assert.doesNotMatch(await p.textContent('#chips'), /Calculus/); // the sample week has its own suggestions
+  await p.context().close();
+});
+
+await check('on a phone the composer sits right under the Now card, above the timeline', async () => {
+  const p = await open();
+  const box = await p.evaluate(() => Object.fromEntries(['now-card', 'say', 'tl-card'].map((id) => [id, document.getElementById(id).getBoundingClientRect()])));
+  assert.ok(box.say.top > box['now-card'].bottom && box.say.top - box['now-card'].bottom < 120, `composer at ${box.say.top}`);
+  assert.ok(box.say.bottom < box['tl-card'].top);
+  await p.evaluate(() => scrollTo(0, 600));
+  await p.waitForFunction(() => document.getElementById('call').classList.contains('mini'));
+  assert.equal(await p.getAttribute('#call', 'aria-label'), 'Call AI');
+  await p.context().close();
+});
+
 await check('the guided demo talks from a bar that stays on screen, and brings the answer into view', async () => {
   const p = await open();
   await p.route('**/api/agent', (r) => r.abort());

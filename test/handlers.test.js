@@ -35,3 +35,13 @@ test('view shows today from a state', () => {
   const { state } = handlers['/api/demo']({ now: '09:00' });
   assert.equal(view(state).now, '09:00');
 });
+
+test('a length the person set by hand is marked, so it is never shown as learned pace', () => {
+  const start = handlers['/api/demo']({ now: '07:00', lang: 'en' });
+  const id = start.state.queue.find((q) => q.status === 'todo').id;
+  const more = handlers['/api/tool']({ state: start.state, name: 'update_item', args: { id, status: 'more_time', minutes: 15 } });
+  assert.equal(more.state.queue.find((q) => q.id === id).touched, true);
+  const part = handlers['/api/progress']({ state: start.state, id, minutes: 20 });
+  assert.equal(part.state.queue.find((q) => q.id === id).touched, true);
+  assert.equal(start.state.queue.find((q) => q.id === id).touched, undefined); // the old state is not mutated
+});

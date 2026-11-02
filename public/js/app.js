@@ -195,6 +195,7 @@ function applyLang() {
   $('send').setAttribute('aria-label', t('replan'));
   $('send').title = t('replan');
   $('photo').setAttribute('aria-label', t('photo'));
+  $('call').setAttribute('aria-label', t('callBtn')); // the label stays when the button folds into a circle
   $('photo').title = t('photo');
   micLabels();
   $('setup-photo-chip').textContent = t('photoAdded');
@@ -239,7 +240,8 @@ function renderChips() {
   const box = $('chips');
   if (chatLog.length || sendCtl) { box.innerHTML = ''; return; }
   const own = mode === 'real' && !template?.sample;
-  const list = t(own ? 'chipsReal' : 'chipsDemo');
+  // The sample week has its own work, so its chips name what is really on it.
+  const list = own ? t('chipsReal') : template?.sample && mode === 'real' ? t('chipsSample')(view?.queue[0]?.title) : t('chipsDemo');
   box.innerHTML = list.map((c, i) => `<button data-chip="${i}">${esc(c)}</button>`).join('');
   box.querySelectorAll('button').forEach((b) => {
     b.onclick = () => { const text = list[Number(b.dataset.chip)]; $('say').value = text; send(text, null, { demo: !own }); };
@@ -327,8 +329,10 @@ async function resetDay(time = '07:00') {
 // what that means: the conversation, a proposal, undo, half-made edits, and any
 // AI answer still on its way all belonged to the old plan.
 let run = 0;
+let focus = null; // { id, end } of the Now item when it first became Now, for the late banner
 function startPlan() {
   run++;
+  focus = null; // a new plan starts on time
   sendCtl?.abort();
   sendCtl = null;
   $('send').disabled = false;
@@ -356,10 +360,9 @@ const span = (q) => dayMin(q.end) - dayMin(q.start);
 // The estimate moved because of how long this role really takes the person.
 function paceLine(item) {
   const it = state.queue.find((q) => q.id === item.id);
-  return it?.base && it.minutes !== it.base ? `<p class="hint">⏱ ${esc(t('pace')(roleName(item.role), it.minutes, it.base))}</p>` : '';
+  return it?.base && !it.touched && it.minutes !== it.base ? `<p class="hint">⏱ ${esc(t('pace')(roleName(item.role), it.minutes, it.base))}</p>` : '';
 }
 
-let focus = null; // { id, end } of the item when it first became Now
 function lateBanner(now) {
   if (!now) { focus = null; return ''; }
   if (!focus || focus.id !== now.id) focus = { id: now.id, end: dayMin(now.end) };
@@ -369,8 +372,10 @@ function lateBanner(now) {
     <div class="row" style="margin-top:8px"><button class="primary small" id="late-go">${t('lateReplan')}</button><button class="small" id="late-more">${t('lateStill')}</button></div></div>`;
 }
 
-const PX = 0.75; // pixels per minute
+// Pixels per minute: tighter on a phone, so a whole evening fits on one screen.
+const narrow = matchMedia('(max-width: 899px)');
 function renderTimeline() {
+  const PX = narrow.matches ? 0.55 : 0.75;
   const tl = $('tl');
   const sleep = state.settings?.sleep ?? dayMin(view.sleep);
   const from = Math.max(0, Math.floor((state.now - 30) / 60) * 60);
@@ -593,10 +598,12 @@ function renderBanner() {
   $('see-review').onclick = () => showTab('week');
 }
 
-function reviewHtml(r) {
+// A week still running has not missed a minimum yet: it shows progress, not a cross.
+const floorCell = (x, open) => !x.floorMin ? '' : x.floorKept ? `<td class="n ok">✓ ${hrs(x.floorMin)}h</td>` : open ? `<td class="n muted">⏳ ${hrs(x.doneMin)}/${hrs(x.floorMin)}h</td>` : `<td class="n warn">✗ ${hrs(x.floorMin)}h</td>`;
+function reviewHtml(r, open = false) {
   return `<table class="rv"><tr><th>${t('role')}</th><th class="n">${t('planned')}</th><th class="n">${t('actual')}</th><th class="n">${t('floor')}</th></tr>
-    ${r.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}</td><td class="n">${hrs(x.targetMin)}h</td><td class="n">${hrs(x.doneMin)}h</td><td class="n ${x.floorKept ? 'ok' : 'warn'}">${x.floorMin ? (x.floorKept ? '✓' : '✗') + ' ' + hrs(x.floorMin) + 'h' : ''}</td></tr>`).join('')}
-  </table><p class="hint">${t('reviewLine')(r.tasksDone, r.tasksTotal, hrs(r.debtMin))}</p>`;
+    ${r.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}</td><td class="n">${hrs(x.targetMin)}h</td><td class="n">${hrs(x.doneMin)}h</td>${floorCell(x, open) || '<td></td>'}</tr>`).join('')}
+  </table><p class="hint">${t('reviewLine')(r.tasksDone, r.tasksTotal, hrs(r.debtMin))}${open ? ` ${t('reviewOpenNote')}` : ''}</p>`;
 }
 
 // Week by week: one small chart per role, on one scale of its own.
@@ -663,7 +670,7 @@ function renderReview() {
     ${nextPlan.roles.map((x) => `<tr><td><span class="dot" style="${rcStyle(x.id)}"></span>${esc(x.name)}${x.why ? `<div class="hint" style="margin:2px 0 0">${esc(x.why)}</div>` : ''}</td><td class="n">${hrs(x.fromMin)}h → <b>${hrs(x.targetMin)}h</b></td></tr>`).join('')}</table>
     <p class="hint">${t('nextLine')(nextPlan.tasks.length)}</p>
     <div class="row"><button class="primary" id="next-ok">${t('approve')}</button><button id="next-no">${t('cancel')}</button></div>` : '';
-  box.innerHTML = `<h2>${closed ? t('reviewLast') : t('reviewTitle')}</h2>${reviewHtml(r)}
+  box.innerHTML = `<h2>${closed ? t('reviewLast') : t('reviewTitle')}</h2>${reviewHtml(r, !closed)}
     ${nextPlan ? plan : `<div class="row"><button class="primary" id="next-go">${t('nextBtn')}</button><button id="share-week">${t('recapBtn')}</button>${closed ? `<button id="review-skip">${t('keepWeek')}</button>` : `<button class="small" id="review-close">${t('hideIntro')}</button>`}</div>`}
     <div class="hint" id="next-status"></div>`;
   if (nextPlan) {
@@ -672,7 +679,7 @@ function renderReview() {
     return;
   }
   $('next-go').onclick = () => planNext(r);
-  $('share-week').onclick = () => shareWeek(r, { t, hrs });
+  $('share-week').onclick = () => shareWeek(r, { t, hrs, open: !closed });
   if (closed) $('review-skip').onclick = () => { template.reviewedWeek = closed.weekStart; saveTemplate(); scheduleSave(); renderExtras(); };
   else $('review-close').onclick = () => { reviewOpen = false; renderReview(); };
 }
@@ -718,6 +725,8 @@ function renderGoals() {
   const pace = new Map((weekData?.goals || []).map((g) => [g.id, g]));
   const used = new Set(goals.map((g) => g.roleId));
   const free = template.roles.filter((r) => !used.has(r.id)).map((r) => r.name);
+  // Hours are counted by role, so goals on one role share one bar, and the card says so.
+  const shared = (g) => goals.filter((o) => o.roleId === g.roleId && o.id !== g.id).map((o) => o.title).join(', ');
   box.innerHTML = `<h2>${t('goalsTab')}</h2>${goals.map((g) => {
     const p = pace.get(g.id);
     const role = template.roles.find((r) => r.id === g.roleId);
@@ -727,7 +736,7 @@ function renderGoals() {
     return `<div class="goal" style="${rcStyle(g.roleId)}">
       <div class="goal-title">${esc(g.title)}</div>
       <div class="row" style="margin:4px 0 8px"><span class="chip role">${esc(role?.name || '')}</span>${g.measure ? `<span class="hint" style="margin:0">${esc(g.measure)}</span>` : ''}${left != null ? `<span class="hint" style="margin:0">${left >= 0 ? t('daysLeft')(left) : t('deadlinePassed')}</span>` : ''}</div>
-      <div class="hint" style="margin:0">${t('goalHours')(hrs(done), hrs(target))}</div>
+      <div class="hint" style="margin:0">${t('goalHours')(hrs(done), hrs(target))}${shared(g) ? ` ${esc(t('goalShared')(shared(g)))}` : ''}</div>
       <div class="bar"><i style="width:${target ? Math.min(100, Math.round((done / target) * 100)) : 0}%"></i></div>
       ${p?.behind ? `<p class="warn" style="margin:8px 0 0;font-size:14px">${t('goalBehind')(hrs(p.doneMin), hrs(p.expectedMin))}</p>` : ''}
       ${template.sample ? '' : phasesHtml(g)}
@@ -1176,3 +1185,7 @@ async function openDay() {
   started = true;
   morningCheckin();
 })();
+
+// The floating call button folds into a circle once the page scrolls (phones only, in CSS).
+addEventListener('scroll', () => $('call').classList.toggle('mini', scrollY > 120), { passive: true });
+narrow.addEventListener?.('change', () => { if (view) renderTimeline(); });

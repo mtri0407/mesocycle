@@ -182,7 +182,7 @@ export function runTool(state, name, args) {
       }
       if (status === 'more_time') {
         if (!intIn(minutes, 5, 240)) return { ...reject('more_time needs minutes from 5 to 240.'), state };
-        const next = { ...state, queue: state.queue.map((i) => (i.id === id ? { ...i, minutes: i.minutes + minutes } : i)) };
+        const next = { ...state, queue: state.queue.map((i) => (i.id === id ? { ...i, minutes: i.minutes + minutes, touched: true } : i)) };
         return done(next);
       }
       return { ...reject('status must be done, skipped or more_time.'), state };

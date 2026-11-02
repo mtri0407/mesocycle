@@ -95,7 +95,7 @@ async function checkedCall(env, { messages, tool, preferred, check, failure }) {
 }
 
 // One real model call per provider, at most every 10 minutes. The monitor in
-// .github/workflows/uptime.yml reads this.
+// The uptime check (.github/workflows/uptime.yml, on the ci-workflows branch until it is merged) reads this.
 let health = { at: 0, body: null };
 async function deepHealth(env) {
   if (Date.now() - health.at < 600_000) return health.body;
