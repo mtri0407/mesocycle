@@ -77,7 +77,8 @@ details.card[open] > summary::before { transform: rotate(45deg); }
 .brand:hover { text-decoration: none; }
 .brand img { border-radius: 8px; display: block; }
 .top .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-#date { font-size: 13px; }
+#date { font-size: 13px; white-space: nowrap; }
+@media (max-width: 479px) { #guide { display: none; } }
 .pill { border-radius: 999px; }
 main { max-width: 680px; margin: 0 auto; padding: 8px 16px calc(104px + env(safe-area-inset-bottom)); }
 #tabs { position: fixed; z-index: 9; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
