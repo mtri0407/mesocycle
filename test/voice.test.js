@@ -18,6 +18,12 @@ test('words from the plan reach the handshake, cleaned and limited', () => {
   assert.equal(handshake('k').keywords, undefined);
   assert.deepEqual(handshake('k', true, ['Giải tích']).keywords, ['Giải tích']);
   assert.deepEqual(readKeywords('{"keywords":["a"," b ",3,""]}'), ['a', 'b']);
-  assert.equal(readKeywords(JSON.stringify({ keywords: Array(99).fill('x') })).length, 40);
+  assert.equal(readKeywords(JSON.stringify({ keywords: Array.from({ length: 99 }, (_, i) => `word ${i}`) })).length, 40);
   assert.deepEqual(readKeywords('nonsense'), []);
+  // Over 30 characters, Meta refuses the whole call: long task names are cut at a word.
+  const long = readKeywords(JSON.stringify({ keywords: ['Calculus block 1: derivatives part 2', 'Redo last year\'s algebra paper (40 min) and grade it', 'Supercalifragilisticexpialidocious!!', 'Gym'] }));
+  assert.ok(long.every((k) => k.length <= 30), JSON.stringify(long));
+  assert.deepEqual(long.slice(0, 2), ['Calculus block 1: derivatives', "Redo last year's algebra paper"]);
+  assert.equal(long[3], 'Gym');
+  assert.deepEqual(readKeywords(JSON.stringify({ keywords: ['Gym', ' Gym '] })), ['Gym']);
 });

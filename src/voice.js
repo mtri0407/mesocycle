@@ -27,10 +27,21 @@ export function readUpstream(text) {
   return { kind: 'ignore' };
 }
 
+// Muse Voice Transcribe refuses the whole session if one keyword is longer
+// than 30 characters (measured on the live API, 04/11). A task name is cut at a
+// word boundary instead, and the same keyword is not sent twice.
+export const MAX_KEYWORD = 30;
+export function shortKeyword(k) {
+  const s = k.replace(/\s+/g, ' ').trim();
+  if (s.length <= MAX_KEYWORD) return s;
+  const cut = s.slice(0, MAX_KEYWORD + 1).replace(/\s+\S*$/, '');
+  return (cut && cut.length <= MAX_KEYWORD ? cut : s.slice(0, MAX_KEYWORD)).replace(/[\s:,;(.-]+$/, '');
+}
 export function readKeywords(text) {
   try {
     const { keywords } = JSON.parse(text);
-    return (Array.isArray(keywords) ? keywords : []).filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().slice(0, 60)).slice(0, 40);
+    const list = (Array.isArray(keywords) ? keywords : []).filter((k) => typeof k === 'string' && k.trim()).map(shortKeyword).filter(Boolean);
+    return [...new Set(list)].slice(0, 40);
   } catch { return []; }
 }
 
