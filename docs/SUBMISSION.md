@@ -11,7 +11,7 @@ Nộp trên cerebralvalley.ai trước 09:00 sáng 05/11 giờ Việt Nam. Mục
 **Links**
 - Repo: https://github.com/mtri0407/mesocycle
 - Live: https://mesocycle.minhtriphamnguyen69.workers.dev
-- Video: [Trí điền sau khi quay]
+- Video: https://youtu.be/uaB4JyyA0O8
 
 **What it does**
 

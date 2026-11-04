@@ -8,6 +8,8 @@ Built for the [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/m
 
 **Try it:** https://mesocycle.minhtriphamnguyen69.workers.dev (press *Try it in 60 seconds*, no sign-in)
 
+**Watch the 3-minute demo:** https://youtu.be/uaB4JyyA0O8 (a real call on the live app, not sped up)
+
 *A mesocycle is a planned block of weeks, built around how you really recover. This is that, for your life.*
 
 ## For judges, in five minutes
