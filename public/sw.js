@@ -1,6 +1,6 @@
 // The app works with no network: its pages and the planning core are kept
 // here, so everything except the AI keeps running.
-const CACHE = 'mesocycle-v11';
+const CACHE = 'mesocycle-v12';
 const CORE = ['planner', 'invariants', 'tools', 'week-tools', 'setup', 'phases', 'greysteel', 'sample', 'demo-state', 'handlers', 'radar', 'diff', 'tradeoff', 'ics'].map((f) => `/core/${f}.js`);
 const JS = ['app', 'dom', 'strings', 'audio', 'voice', 'editors', 'importer', 'reminders', 'picture', 'focus', 'phases-ui', 'tour'].map((f) => `/js/${f}.js`);
 const SHELL = ['/', '/css/app.css', ...JS, '/icon.svg', '/icon-192.png', '/manifest.webmanifest', '/privacy', '/terms', '/huong-dan', '/core/replay-en.json', '/core/replay-vi.json', '/sample-syllabus.pdf', ...CORE];

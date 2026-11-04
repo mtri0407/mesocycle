@@ -133,9 +133,11 @@ function spokenAnswer(done) {
   const { state } = app;
   const title = (id) => (state.queue.find((q) => q.id === id) || {}).title || id;
   const p = done.proposal;
-  // Spoken: the reason, not seven task names. The names are on the screen.
+  // Spoken: only who stands behind each option. The reasons and task names
+  // are on the screen. While the device talks the AI cannot hear, so a long
+  // answer means the person's choice is lost if they speak too early.
   const name = (o) => (t('guardian')[o.by] || '').replace(/^\S+\s/, '');
-  const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${name(o) ? `, ${name(o)}` : ''}: ${o.why || o.ids.map(title).slice(0, 3).join(', ')}.`).join(' ') : '';
+  const options = p ? p.options.map((o, i) => `${t('optionN')(i + 1)}${name(o) ? `, ${name(o)}` : `: ${o.ids.map(title).slice(0, 2).join(', ')}`}.`).join(' ') : '';
   return `${done.reply || p?.message || ''} ${options}${p ? ` ${t('whichOne')}` : ''}`.trim();
 }
 async function callTurn(text) {
